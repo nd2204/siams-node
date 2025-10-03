@@ -1,3 +1,23 @@
+menu "MQTT Configuration"
+
+    config MQTT_BROKER_URI
+        string "MQTT broker URI (mqtts://host:8883)"
+        default "mqtt://broker.hivemq.com:1883"
+
+    config MQTT_USERNAME
+        string "MQTT username"
+        default ""
+
+    config MQTT_PASSWORD
+        string "MQTT password"
+        default ""
+
+    config DEVICE_ID
+        string "Device ID"
+        default "esp32-default"
+
+endmenu
+
 menu "Wi-Fi Configuration"
 
     config ESP_WIFI_SSID

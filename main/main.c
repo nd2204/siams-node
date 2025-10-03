@@ -1,8 +1,10 @@
+#include "misc/lv_async.h"
+#include "sn_config.h"
 #include "sn_devmgr.h"
+#include "sn_sysmgr.h"
 #include "sn_ui.h"
 #include "sn_wifi.h"
 
-#include "nvs_flash.h"
 #include "sdkconfig.h"
 #include <esp_err.h>
 #include <esp_log.h>
@@ -11,51 +13,44 @@
 #include <freertos/task.h>
 #include <sys/param.h>
 
-#include "dht.h"
-#include "soc/gpio_num.h"
+#include "sn_sensors.h"
 
-void read_dht_task() {
-  float temperature = 0.0f, humidity = 0.0f;
+static const char *TAG = "main";
 
-  // Read temperature and humidity
-  while (1) {
-    if (dht_read_float_data(DHT_TYPE_DHT11, GPIO_NUM_23, &humidity,
-                            &temperature) == ESP_OK) {
-      printf("Temperature: %.1f°C, Humidity: %.1f%%\n", temperature, humidity);
-    } else {
-      printf("Failed to read data from DHT sensor.\n");
-    }
-    vTaskDelay(2000 / portTICK_PERIOD_MS); // Delay for 2 seconds
-  }
+#define I2C_PORT I2C_NUM_0
+
+void demo_ui(void *params) {
+  ESP_LOGI(TAG, "Display LVGL Scroll Text");
+  lv_display_t *disp = sn_ui_get_display();
+  lv_obj_t *scr = lv_display_get_screen_active(disp);
+  lv_obj_t *label = lv_label_create(scr);
+  lv_label_set_long_mode(label, LV_LABEL_LONG_SCROLL_CIRCULAR); /* Circular scroll */
+  lv_label_set_text(label, "Hello cruel world");
+  /* Size of the screen (if you use rotation 90 or 270, please use
+   * lv_display_get_vertical_resolution) */
+  lv_obj_set_width(label, lv_display_get_horizontal_resolution(disp));
+  lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
 }
 
 void app_main(void) {
-  sn_devmgr_init();
-  lvgl_task();
+  sn_sysmgr_init_self();
+  SN_SYSMGR_REGISTER("sn-devmgr", sn_devmgr_init, NULL);
+  SN_SYSMGR_REGISTER("sn-sensors", sn_sensors_init, NULL);
+  SN_SYSMGR_REGISTER("sn-ui", sn_ui_init, NULL);
+  // SN_SYSMGR_REGISTER("sn-wifi", sn_wifi_init, NULL);
+  sn_sysmgr_init_all();
 
-  {
-    // Initialize NVS
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
-        ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-      ESP_ERROR_CHECK(nvs_flash_erase());
-      ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
+  if (sn_sysmgr_is_valid()) {
+    // sn_wifi_connect(CONFIG_ESP_WIFI_SSID, CONFIG_ESP_WIFI_PASSWORD);
 
-    if (CONFIG_LOG_MAXIMUM_LEVEL > CONFIG_LOG_DEFAULT_LEVEL) {
-      /* If you only want to open more logs in the wifi module, you need to make
-       * the max level greater than the default level, and call
-       * esp_log_level_set() before esp_wifi_init() to improve the log level of
-       * the wifi module. */
-      esp_log_level_set("wifi", CONFIG_LOG_MAXIMUM_LEVEL);
-    }
+    xTaskCreatePinnedToCore(
+      ui_task, "ui-task", LVGL_TASK_STACK_SIZE, NULL, LVGL_TASK_PRIORITY, NULL, 0
+    );
+    // xTaskCreatePinnedToCore(read_bh1750_task, "light-task", 4096, NULL, 5, NULL, 1);
+    xTaskCreatePinnedToCore(read_dht_task, "dht-task", 4096, NULL, 5, NULL, 1);
 
-    sn_wifi_init();
+    lv_async_call(demo_ui, NULL);
   }
 
-  sn_wifi_connect(CONFIG_ESP_WIFI_SSID, CONFIG_ESP_WIFI_PASSWORD);
-
-  read_dht_task();
-  // xTaskCreate(read_dht_task, "dht-task", 512, NULL, 2, NULL);
+  sn_sysmgr_shutdown_all();
 }
