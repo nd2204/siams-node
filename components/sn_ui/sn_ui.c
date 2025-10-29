@@ -1,7 +1,7 @@
 #include "sn_ui.h"
 #include "misc/lv_async.h"
 #include "sn_config.h"
-#include "sn_devmgr.h"
+#include "systems/sn_device_mgr.h"
 #include "sn_error.h"
 
 #include <esp_lcd_panel_io.h>
@@ -150,7 +150,7 @@ static esp_err_t init_lgvl() {
   return esp_lcd_panel_io_register_event_callbacks(g_ioHandle, &cbs, g_display);
 }
 
-esp_err_t sn_ui_init() {
+esp_err_t sn_ui_init(void *pvParams) {
   // lvgl_api_lock = xSemaphoreCreateMutex();
   // RETURN_IF_FALSE(TAG, !lvgl_api_lock, ESP_FAIL, "Cannot create semaphore");
   RETURN_IF_FALSE(

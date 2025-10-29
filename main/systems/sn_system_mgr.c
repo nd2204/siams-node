@@ -1,4 +1,4 @@
-#include "sn_sysmgr.h"
+#include "sn_system_mgr.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -16,10 +16,10 @@ void sn_sysmgr_init_self() {
 void sn_sysmgr_init_all() {
   sys_config_t config;
   while (xQueueReceive(s_config_queue, &config, pdMS_TO_TICKS(1000)) == pdTRUE) {
-    ESP_LOGI(TAG, ">>>>>>>>>>>>>>>>>> Inializing %s", config.name);
-    esp_err_t ret = config.init_cb();
+    ESP_LOGW(TAG, ">>>>>>>>>>>>>>>>>> Inializing %s", config.name);
+    esp_err_t ret = config.init_cb(config.init_args);
     if (ret == ESP_OK) {
-      ESP_LOGI(TAG, "<<<<<<<<<<<<<<<<<< Done");
+      ESP_LOGW(TAG, "<<<<<<<<<<<<<<<<<< Done");
     } else {
       ESP_LOGE(TAG, "<<<<<<<<<<<<<<<<<< Error");
       s_system_has_error = true;

@@ -1,4 +1,4 @@
-#include "sn_devmgr.h"
+#include "systems/sn_device_mgr.h"
 #include "freertos/FreeRTOS.h"
 #include "sn_config.h"
 
@@ -19,7 +19,7 @@ static SemaphoreHandle_t g_busMutex = NULL;
 static esp_err_t g_scanResult[I2C_ADDRESS_RANGE];
 static bool g_scanned = false;
 
-esp_err_t sn_devmgr_init() {
+esp_err_t sn_devmgr_init(void *args) {
   g_busMutex = xSemaphoreCreateMutex();
   configASSERT(g_busMutex);
 
