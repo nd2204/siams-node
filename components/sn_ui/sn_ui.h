@@ -4,7 +4,7 @@
 #include "esp_err.h"
 #include "lvgl.h"
 
-esp_err_t sn_ui_init();
+esp_err_t sn_ui_init(void *pvParams);
 
 void ui_task();
 

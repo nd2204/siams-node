@@ -12,9 +12,25 @@ menu "MQTT Configuration"
         string "MQTT password"
         default ""
 
-    config DEVICE_ID
-        string "Device ID"
-        default "esp32-default"
+endmenu
+
+menu "Telemetry Configuration"
+
+    config ORG_ID
+        string "Organization Id"
+        default ""
+
+    config CLUSTER_ID
+        string "Cluster Id"
+        default ""
+
+endmenu
+
+menu "Device configuration"
+
+    config DEVICE_MAX_SENSORS_SUPPORTED
+        int "Max sensors supported"
+        default 8
 
 endmenu
 
