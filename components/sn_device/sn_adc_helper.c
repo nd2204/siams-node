@@ -1,142 +1,126 @@
 #include "sn_adc_helper.h"
-#include "esp_adc/adc_oneshot.h"
+#include "driver/adc_types_legacy.h"
 #include "esp_log.h"
+#include "esp_adc_cal.h"
+#include "driver/adc.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/semphr.h"
-#include "esp_adc/adc_cali.h"
-#include "esp_adc/adc_cali_scheme.h"
+#include <stdlib.h>
 
 static const char *TAG = "ADC_HELPER";
 
-static SemaphoreHandle_t s_mutex = NULL;
-static adc_oneshot_unit_handle_t s_unit = NULL;
-static adc_cali_handle_t s_cali = NULL;
+static SemaphoreHandle_t s_adc_mutex = NULL;
 
-// store per-channel attenuation so conversion uses the right calibration
-static adc_atten_t s_channel_atten[ADC_CHANNEL_MAX];
+// We keep characteristics per attenuation (0/2.5/6/11 dB)
+static esp_adc_cal_characteristics_t *s_chars = NULL;
+static bool s_chars_ready = false;
 
-static inline int atten_index(adc_atten_t a) { return (int)a; }
+// default global width & default attenuation
+static const adc_bits_width_t DEFAULT_WIDTH = ADC_WIDTH_BIT_12;
+static const adc_atten_t DEFAULT_ATTEN = ADC_ATTEN_DB_12;
+static const uint32_t DEFAULT_VREF = 1100; // mV (used if no eFuse Vref)
+
+static inline int atten_index(adc_atten_t a) {
+  // ADC_ATTEN_DB_0 = 0, DB_2_5 =1, DB_6=2, DB_11=3
+  return (int)a;
+}
 
 esp_err_t adc_helper_init(void) {
-  if (s_unit) return ESP_OK;
-
-  s_mutex = xSemaphoreCreateMutex();
-  if (!s_mutex) return ESP_ERR_NO_MEM;
-
-  adc_oneshot_unit_init_cfg_t unit_cfg = {
-    .unit_id = ADC_UNIT_1,
-  };
-  ESP_ERROR_CHECK(adc_oneshot_new_unit(&unit_cfg, &s_unit));
-
-  // try to enable calibration (supported on most chips)
-  adc_cali_curve_fitting_config_t cali_cfg = {
-    .unit_id = ADC_UNIT_1,
-    .atten = ADC_ATTEN_DB_11,
-    .bitwidth = ADC_BITWIDTH_12,
-  };
-  esp_err_t ret = adc_cali_create_scheme_curve_fitting(&cali_cfg, &s_cali);
-  if (ret == ESP_OK) {
-    ESP_LOGI(TAG, "ADC calibration enabled");
-  } else {
-    s_cali = NULL;
-    ESP_LOGW(TAG, "ADC calibration not available, using raw values");
+  if (s_adc_mutex == NULL) {
+    s_adc_mutex = xSemaphoreCreateMutex();
+    if (!s_adc_mutex) {
+      ESP_LOGE(TAG, "Failed to create ADC mutex");
+      return ESP_ERR_NO_MEM;
+    }
   }
 
-  for (int i = 0; i < ADC_CHANNEL_MAX; ++i)
-    s_channel_atten[i] = ADC_ATTEN_DB_11; // default
+  // set ADC1 global width
+  adc1_config_width(DEFAULT_WIDTH);
 
+  // allocate characteristics for 4 attenuation levels
+  if (!s_chars) {
+    s_chars = calloc(4, sizeof(esp_adc_cal_characteristics_t));
+    if (!s_chars) return ESP_ERR_NO_MEM;
+  }
+
+  // characterize for each attenuation
+  for (int i = 0; i < 4; ++i) {
+    esp_adc_cal_value_t val = esp_adc_cal_characterize(
+      ADC_UNIT_1, (adc_atten_t)i, DEFAULT_WIDTH, DEFAULT_VREF, &s_chars[i]
+    );
+    ESP_LOGI(TAG, "ADC char att=%d: type=%d", i, val);
+  }
+  s_chars_ready = true;
+  ESP_LOGI(TAG, "adc_helper initialized");
   return ESP_OK;
 }
 
-esp_err_t adc_helper_deinit(void) {
-  if (s_cali) {
-    adc_cali_delete_scheme_curve_fitting(s_cali);
-    s_cali = NULL;
-  }
-  if (s_unit) {
-    adc_oneshot_del_unit(s_unit);
-    s_unit = NULL;
-  }
-  if (s_mutex) {
-    vSemaphoreDelete(s_mutex);
-    s_mutex = NULL;
-  }
+esp_err_t adc_helper_config_channel_atten(adc1_channel_t ch, adc_atten_t atten) {
+  if (ch < ADC1_CHANNEL_0 || ch >= ADC1_CHANNEL_MAX) return ESP_ERR_INVALID_ARG;
+  // caller must ensure adc_helper_init() called
+  adc1_config_channel_atten(ch, atten);
   return ESP_OK;
 }
 
-adc_channel_t adc_helper_pin_to_channel(gpio_num_t pin) {
-  switch (pin) {
-    case GPIO_NUM_32:
-      return ADC_CHANNEL_4;
-    case GPIO_NUM_33:
-      return ADC_CHANNEL_5;
-    case GPIO_NUM_34:
-      return ADC_CHANNEL_6;
-    case GPIO_NUM_35:
-      return ADC_CHANNEL_7;
-    case GPIO_NUM_36:
-      return ADC_CHANNEL_0;
-    case GPIO_NUM_37:
-      return ADC_CHANNEL_1;
-    case GPIO_NUM_38:
-      return ADC_CHANNEL_2;
-    case GPIO_NUM_39:
-      return ADC_CHANNEL_3;
-    default:
-      return ADC_CHANNEL_MAX;
-  }
+int adc_helper_read_raw(adc1_channel_t ch) {
+  if (ch < ADC1_CHANNEL_0 || ch >= ADC1_CHANNEL_MAX) return -1;
+  if (!s_adc_mutex) return -1;
+  if (xSemaphoreTake(s_adc_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) return -1;
+  // perform single raw read
+  int raw = adc1_get_raw(ch);
+  xSemaphoreGive(s_adc_mutex);
+  return raw;
 }
 
-esp_err_t adc_helper_config_channel(gpio_num_t pin, adc_atten_t atten, adc_channel_t *out_ch) {
-  if (!s_unit) return ESP_ERR_INVALID_STATE;
-  adc_channel_t ch = adc_helper_pin_to_channel(pin);
-  if (ch == ADC_CHANNEL_MAX) return ESP_ERR_INVALID_ARG;
-
-  adc_oneshot_chan_cfg_t chan_cfg = {
-    .atten = atten,
-    .bitwidth = ADC_BITWIDTH_12,
-  };
-  ESP_ERROR_CHECK(adc_oneshot_config_channel(s_unit, ch, &chan_cfg));
-  s_channel_atten[ch] = atten;
-
-  if (out_ch) *out_ch = ch;
-  return ESP_OK;
-}
-
-esp_err_t adc_helper_read_raw(adc_channel_t ch, int *out_raw) {
-  if (!out_raw) return ESP_ERR_INVALID_ARG;
-  if (!s_unit) return ESP_ERR_INVALID_STATE;
-  if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(1000)) != pdTRUE) return ESP_ERR_TIMEOUT;
-  esp_err_t res = adc_oneshot_read(s_unit, ch, out_raw);
-  xSemaphoreGive(s_mutex);
-  return res;
-}
-
-esp_err_t adc_helper_read_raw_avg(adc_channel_t ch, int samples, int *out_raw) {
-  if (!out_raw) return ESP_ERR_INVALID_ARG;
+int adc_helper_read_raw_avg(adc1_channel_t ch, int samples) {
   if (samples <= 0) samples = 1;
   long sum = 0;
-  int val;
   for (int i = 0; i < samples; ++i) {
-    if (adc_helper_read_raw(ch, &val) != ESP_OK) return ESP_FAIL;
-    sum += val;
-    ets_delay_us(80);
+    int r = adc_helper_read_raw(ch);
+    if (r < 0) return r;
+    sum += r;
+    // small settlement delay to reduce channel switching artifacts
+    esp_rom_delay_us(100); // microseconds; short busy wait (safe in small loops)
   }
-  *out_raw = (int)(sum / samples);
+  return (int)(sum / samples);
+}
+
+uint32_t adc_helper_raw_to_mv(adc1_channel_t ch, int raw) {
+  (void)ch; // characteristic depends on configured attenuation, we assume default
+  if (!s_chars_ready || !s_chars) return 0;
+  // We don't know which attenuation the channel currently has here.
+  // Use the highest attenuation characteristic (DB_11) by default for better dynamic range.
+  return esp_adc_cal_raw_to_voltage(raw, &s_chars[atten_index(DEFAULT_ATTEN)]);
+}
+
+esp_err_t adc_helper_read_mv_avg(adc1_channel_t ch, int samples, uint32_t *out_mv) {
+  if (!out_mv) return ESP_ERR_INVALID_ARG;
+  int raw = adc_helper_read_raw_avg(ch, samples);
+  if (raw < 0) return ESP_FAIL;
+  *out_mv = adc_helper_raw_to_mv(ch, raw);
   return ESP_OK;
 }
 
-esp_err_t adc_helper_read_mv_avg(adc_channel_t ch, int samples, uint32_t *out_mv) {
-  if (!out_mv) return ESP_ERR_INVALID_ARG;
-  int raw;
-  ESP_RETURN_ON_ERROR(adc_helper_read_raw_avg(ch, samples, &raw), TAG, "raw read failed");
-  if (s_cali) {
-    ESP_RETURN_ON_ERROR(
-      adc_cali_raw_to_voltage(s_cali, raw, (int *)out_mv), TAG, "calibration convert failed"
-    );
-  } else {
-    // crude fallback: scale 0..4095 => 0..3300 mV
-    *out_mv = (uint32_t)((raw * 3300) / 4095);
+adc1_channel_t adc_helper_pin_to_channel(gpio_num_t pin) {
+  switch (pin) {
+    case GPIO_NUM_32:
+      return ADC1_CHANNEL_4;
+      break;
+    case GPIO_NUM_33:
+      return ADC1_CHANNEL_5;
+      break;
+    case GPIO_NUM_34:
+      return ADC1_CHANNEL_6;
+      break;
+    case GPIO_NUM_35:
+      return ADC1_CHANNEL_7;
+      break;
+    case GPIO_NUM_36:
+      return ADC1_CHANNEL_0;
+      break;
+    case GPIO_NUM_39:
+      return ADC1_CHANNEL_3;
+      break;
+    default:
+      return ADC1_CHANNEL_MAX;
   }
-  return ESP_OK;
 }

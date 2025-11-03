@@ -79,12 +79,12 @@ void sn_driver_bind_all_ports(const sn_device_port_desc_t *ports, size_t ports_l
 
     if (!best_drv) {
       inst->online = false;
-      ESP_LOGW(TAG, "No driver for %s '%s' drv_name='%s'", tstr, p->port_name, p->drv_name);
+      ESP_LOGE(TAG, "No driver for %s '%s' drv_name='%s'", tstr, p->port_name, p->drv_name);
     } else {
       esp_err_t err = best_drv->init ? best_drv->init(p, &inst->ctx, sizeof(inst->ctx)) : ESP_OK;
       if (err == ESP_OK) {
         inst->online = true;
-        ESP_LOGI(
+        ESP_LOGW(
           TAG, "Slot (%d): Bound %s '%s' -> driver '%s'", gDeviceInstancesLen, tstr, p->port_name,
           best_drv->name
         );

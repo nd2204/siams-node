@@ -26,7 +26,6 @@ static void rebuild_topics(void) {
   );
   TOPIC_DEVICE_CONFIG(gen_fill_cache)
 #undef gen_fill_cache
-  ESP_LOGI(TAG, "MQTT topics rebuilt for %s/%s/%s", ctx.orgId, ctx.clusterId, ctx.deviceId);
 }
 
 void print_topic_cache(void) {
@@ -40,13 +39,22 @@ void print_topic_cache(void) {
 //--------------------------------------------------------------------------------
 
 esp_err_t sn_mqtt_topic_cache_init(const sn_mqtt_topic_context_t *context) {
-  return sn_mqtt_topic_cache_set_context(context);
+  if (!context) return ESP_ERR_INVALID_ARG;
+  memcpy(&ctx, context, sizeof(sn_mqtt_topic_context_t));
+  memset(&cache, 0, sizeof(sn_mqtt_topic_cache_t));
+  rebuild_topics();
+  ESP_LOGI(TAG, "MQTT topics initialized", ctx.orgId, ctx.clusterId, ctx.deviceId);
+  ESP_LOGI(TAG, "orgId=%s", ctx.orgId);
+  ESP_LOGI(TAG, "clusterId=%s", ctx.clusterId);
+  ESP_LOGI(TAG, "deviceId=%s", ctx.deviceId);
+  return ESP_OK;
 }
 
 esp_err_t sn_mqtt_topic_cache_set_context(const sn_mqtt_topic_context_t *context) {
   if (!context) return ESP_ERR_INVALID_ARG;
   memcpy(&ctx, context, sizeof(sn_mqtt_topic_context_t));
   memset(&cache, 0, sizeof(sn_mqtt_topic_cache_t));
+  ESP_LOGI(TAG, "MQTT topics rebuilt for %s/%s/%s", ctx.orgId, ctx.clusterId, ctx.deviceId);
   rebuild_topics();
   return ESP_OK;
 }

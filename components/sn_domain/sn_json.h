@@ -5,7 +5,7 @@
 #include "sn_driver/sensor.h"
 #include <stdbool.h>
 
-typedef enum { PTYPE_INT, PTYPE_NUMBER, PTYPE_BOOL, PTYPE_STRING } ptype_t;
+typedef enum { PTYPE_INT = 0, PTYPE_NUMBER, PTYPE_BOOL, PTYPE_STRING } ptype_t;
 
 typedef struct {
   const char *name;
@@ -35,6 +35,8 @@ cJSON *sensor_reading_to_json_obj(const sn_sensor_reading_t *m);
 bool json_get_bool(const cJSON *root, const char *key, bool *out_val);
 
 bool json_get_number(const cJSON *root, const char *key, double *out_val);
+
+bool json_get_int(const cJSON *root, const char *key, int *out_val);
 
 bool json_get_object(const cJSON *root, const char *key, const cJSON **out_val);
 

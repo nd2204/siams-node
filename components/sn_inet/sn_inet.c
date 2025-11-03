@@ -1,5 +1,6 @@
 #include "sn_inet.h"
 #include "esp_event_base.h"
+#include "freertos/projdefs.h"
 #include "sn_error.h"
 
 #include <sdkconfig.h>
@@ -59,7 +60,7 @@ static void event_handler(
       if (sRetryNum < CONFIG_ESP_MAXIMUM_RETRY) {
         esp_wifi_connect();
         sRetryNum++;
-        ESP_LOGI(TAG, "Retrying... (%02d/%d)", sRetryNum, CONFIG_ESP_MAXIMUM_RETRY);
+        ESP_LOGI(TAG, "Retrying... (%d/%d)", sRetryNum, CONFIG_ESP_MAXIMUM_RETRY);
       } else {
         xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
         ESP_LOGE(TAG, "Connect to the AP fail");
@@ -111,6 +112,8 @@ esp_err_t sn_inet_init(void *args) {
 
 esp_err_t sn_inet_wifi_connect(const char *ssid, const char *password) {
   if (!sWifiSystemActive) sn_init_wifi();
+  vTaskDelay(pdMS_TO_TICKS(1000)); // wait for init
+
   if (sIsConnected) return ESP_OK;
   // Assign wifi event handlers
   esp_event_handler_instance_t instance_any_id;

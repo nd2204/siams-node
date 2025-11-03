@@ -80,7 +80,6 @@ static esp_err_t soil_moisture_read_multi(
   uint32_t dry = c->dry_mv;
   uint32_t wet = c->wet_mv;
   if (dry == wet) return ESP_ERR_INVALID_STATE;
-  printf("mv=%ld", mv);
 
   time(&now);
   out_buf[0].local_id = c->sensor_id;

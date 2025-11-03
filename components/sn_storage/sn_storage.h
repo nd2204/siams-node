@@ -4,9 +4,10 @@
 #include "esp_err.h"
 #define STORAGE_NAMESPACE "sn_storage"
 
-#define DECLARE_GETTER_SETTER(KEY)                                                                 \
+#define DECLARE_GETTER_SETTER_DELETE(KEY)                                                          \
   esp_err_t sn_storage_set_##KEY(const char *KEY);                                                 \
-  esp_err_t sn_storage_get_##KEY(char *out, size_t len);
+  esp_err_t sn_storage_get_##KEY(char *out, size_t len);                                           \
+  esp_err_t sn_storage_erase_##KEY();
 
 // --------------------------------------------------------------------------------
 // Init & teardown
@@ -53,10 +54,10 @@ void sn_storage_list_all(void);
 // --------------------------------------------------------------------------------
 // Device Info
 // --------------------------------------------------------------------------------
-DECLARE_GETTER_SETTER(device_id);
-DECLARE_GETTER_SETTER(device_capabilities);
-DECLARE_GETTER_SETTER(org_id);
-DECLARE_GETTER_SETTER(cluster_id);
+DECLARE_GETTER_SETTER_DELETE(device_id);
+DECLARE_GETTER_SETTER_DELETE(device_capabilities);
+DECLARE_GETTER_SETTER_DELETE(org_id);
+DECLARE_GETTER_SETTER_DELETE(cluster_id);
 // --------------------------------------------------------------------------------
 // Credentials
 // --------------------------------------------------------------------------------

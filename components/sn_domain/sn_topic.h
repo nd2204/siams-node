@@ -3,8 +3,7 @@
 
 #include "cJSON.h"
 #include "esp_err.h"
-#include "sdkconfig.h"
-#include "sn_driver/port_desc.h"
+#include "forward.h"
 
 #define MAX_TOPIC_LEN 256
 
@@ -45,6 +44,7 @@ esp_err_t sn_mqtt_topic_cache_set_context(const sn_mqtt_topic_context_t *ctx);
 
 const sn_mqtt_topic_context_t *sn_mqtt_topic_cache_get_context(void);
 
+// return the topic cache (never NUll)
 const sn_mqtt_topic_cache_t *sn_mqtt_topic_cache_get(void);
 
 // debug

@@ -5,11 +5,12 @@
 
 static const char *TAG = "SN_STORAGE";
 
-#define DEFINE_GETTER_SETTER(KEY)                                                                  \
+#define DEFINE_GETTER_SETTER_DELETE(KEY)                                                           \
   esp_err_t sn_storage_set_##KEY(const char *KEY) { return sn_storage_set_string(#KEY, KEY); }     \
   esp_err_t sn_storage_get_##KEY(char *out, size_t len) {                                          \
     return sn_storage_get_string(#KEY, out, len);                                                  \
-  }
+  }                                                                                                \
+  esp_err_t sn_storage_erase_##KEY() { return sn_storage_erase_key(#KEY); }
 
 // --------------------------------------------------------------------------------
 // Init & teardown
@@ -73,10 +74,10 @@ esp_err_t sn_storage_erase_key(const char *key) {
 // Device Info
 // --------------------------------------------------------------------------------
 
-DEFINE_GETTER_SETTER(device_id)
-DEFINE_GETTER_SETTER(device_capabilities)
-DEFINE_GETTER_SETTER(org_id)
-DEFINE_GETTER_SETTER(cluster_id)
+DEFINE_GETTER_SETTER_DELETE(device_id)
+DEFINE_GETTER_SETTER_DELETE(device_capabilities)
+DEFINE_GETTER_SETTER_DELETE(org_id)
+DEFINE_GETTER_SETTER_DELETE(cluster_id)
 
 // --------------------------------------------------------------------------------
 // Credentials

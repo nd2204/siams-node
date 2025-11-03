@@ -88,14 +88,18 @@ bool validate_params_json(const sn_param_desc_t *desc, cJSON *params, cJSON **er
  * returns an command capability json with this structure:
  * {
  *   "action": "action-name",
- *   "params": {  // (optional)
- *     "arg1": {
+ *   "params": [  // (optional)
+ *     {
+ *       "name":"arg1",
  *       "type": "string",
  *       "enums": ["a", "b"] // (optional)
  *     },
- *     "arg2": { "type": "number"},
+ *     {
+ *       "name": "arg2",
+ *       "type": "number"
+ *     }
  *     ...
- *   },
+ *   ],
  * }
  */
 
@@ -113,17 +117,20 @@ cJSON *command_desc_to_json(const sn_command_desc_t *desc) {
     return schema;
   }
   const sn_param_desc_t *params = desc->params;
-  cJSON *paramsJsonObj = cJSON_AddObjectToObject(schema, "params");
+  cJSON *params_obj = cJSON_AddArrayToObject(schema, "params");
   for (int i = 0; i < desc->params_count; i++) {
-    cJSON *arg = cJSON_AddObjectToObject(paramsJsonObj, params[i].name);
-    cJSON_AddStringToObject(arg, "type", ptype_str[params[i].type]);
+    cJSON *arg_obj = cJSON_CreateObject();
+
+    cJSON_AddStringToObject(arg_obj, "name", params[i].name);
+    cJSON_AddStringToObject(arg_obj, "type", ptype_str[params[i].type]);
     const char **it = params[i].enum_values;
-    if (*it) {
-      cJSON *enum_arr = cJSON_AddArrayToObject(arg, "enums");
+    if (it && *it) {
+      cJSON *enum_arr = cJSON_AddArrayToObject(arg_obj, "enums");
       for (; *it; i++) {
         cJSON_AddItemToArray(enum_arr, cJSON_CreateString(*it));
       }
     }
+    cJSON_AddItemToArray(params_obj, arg_obj);
   }
   return schema;
 }
@@ -187,6 +194,13 @@ bool json_get_number(const cJSON *root, const char *key, double *out_val) {
   const cJSON *item = cJSON_GetObjectItemCaseSensitive(root, key);
   if (!cJSON_IsNumber(item)) return false;
   *out_val = cJSON_GetNumberValue(item);
+  return true;
+}
+
+bool json_get_int(const cJSON *root, const char *key, int *out_val) {
+  const cJSON *item = cJSON_GetObjectItemCaseSensitive(root, key);
+  if (!cJSON_IsNumber(item)) return false;
+  *out_val = (int)cJSON_GetNumberValue(item);
   return true;
 }
 

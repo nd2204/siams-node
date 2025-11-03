@@ -51,7 +51,7 @@ static const sn_param_desc_t params_desc[] = {
 static const sn_command_desc_t schema = {
   .action = "control_led",
   .params = params_desc,
-  .params_count = sizeof(params_desc) / sizeof(sn_param_desc_t)
+  .params_count = (sizeof(params_desc) / sizeof(sn_param_desc_t)) - 1 // minus the NULL terminate
 };
 
 // ----------------------------------------------------

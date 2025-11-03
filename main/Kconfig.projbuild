@@ -14,7 +14,7 @@ menu "MQTT Configuration"
 
 endmenu
 
-menu "Telemetry Configuration"
+menu "Device configuration"
 
     config ORG_ID
         string "Organization Id"
@@ -24,13 +24,13 @@ menu "Telemetry Configuration"
         string "Cluster Id"
         default ""
 
-endmenu
-
-menu "Device configuration"
-
     config DEVICE_MAX_SENSORS_SUPPORTED
         int "Max sensors supported"
         default 8
+
+    config FIRMWARE_VERSION
+        string "Firmware version (semantic)"
+        default ""
 
 endmenu
 

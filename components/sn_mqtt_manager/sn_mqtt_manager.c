@@ -109,6 +109,7 @@ esp_err_t sn_mqtt_start(void) {
   }
 
   esp_err_t err = esp_mqtt_client_start(client);
+
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Failed to start MQTT client: %s", esp_err_to_name(err));
   }
@@ -158,3 +159,12 @@ esp_err_t sn_mqtt_stop() { return esp_mqtt_client_stop(client); }
 esp_err_t sn_mqtt_destroy() { return esp_mqtt_client_destroy(client); }
 
 bool sn_mqtt_is_connected(void) { return connected; }
+
+void mqtt_debug_print_rx(const void *event) {
+  esp_mqtt_event_handle_t e = (esp_mqtt_event_handle_t)event;
+  char topic[MAX_TOPIC_LEN];
+  snprintf(topic, e->topic_len + 1, "%.*s", e->topic_len, e->topic);
+  char data[256];
+  snprintf(data, e->data_len + 1, "%.*s", e->data_len, e->data);
+  ESP_LOGI(TAG, "RX [%s]: %s", topic, data);
+}

@@ -54,4 +54,9 @@ esp_err_t sn_mqtt_stop();
  */
 esp_err_t sn_mqtt_destroy();
 
+/*
+ * @brief debug utils
+ */
+void mqtt_debug_print_rx(const void *event);
+
 #endif // !SN_MQTT_MANAGER_H
