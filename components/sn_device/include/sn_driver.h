@@ -117,10 +117,34 @@ static inline sn_device_instance_t *find_instance_by_name(const char *name) {
   return NULL;
 }
 
+// Debug print
+static inline void print_instance(const sn_device_instance_t *inst) {
+  if (!inst) {
+    ESP_LOGE("DEBUG", "Instance is null");
+    return;
+  }
+
+  switch (inst->port->drv_type) {
+    case DRIVER_TYPE_SENSOR:
+      pm_print(ESP_LOG_INFO, inst->port->desc.s.measurements, "DEBUG");
+      break;
+    case DRIVER_TYPE_ACTUATOR:
+      ESP_LOGI("DEBUG", "[localId=%d] ", inst->port->desc.a.local_id);
+      break;
+    case DRIVER_TYPE_COMMAND_API:
+      ESP_LOGI("DEBUG", "[localId=%d] ", inst->port->desc.c.local_id);
+      break;
+  }
+
+  ESP_LOGI(
+    "DEBUG", "|name=%s| |active=%d| |drv=%s type=%d|", inst->port->port_name, inst->online,
+    inst->port->drv_name, inst->port->drv_type
+  );
+}
+
 // Find instance by localId
 static inline sn_device_instance_t *find_instance_by_local_id(uint8_t local_id) {
-  for (int i = 0; i < gDeviceInstancesLen; ++i) {
-    const sn_device_instance_t *inst = &gDeviceInstances[i];
+  FOR_EACH_INSTANCE(inst, gDeviceInstances, gDeviceInstancesLen) {
     switch (inst->port->drv_type) {
       case DRIVER_TYPE_SENSOR: {
         FOR_EACH_MEASUREMENT(it, inst->port->desc.s.measurements) {
@@ -128,20 +152,26 @@ static inline sn_device_instance_t *find_instance_by_local_id(uint8_t local_id) 
             return (sn_device_instance_t *)inst;
           }
         }
-        return NULL;
+        continue;
       }
       case DRIVER_TYPE_ACTUATOR: {
-        return inst->port->desc.a.local_id == local_id ? (sn_device_instance_t *)inst : NULL;
+        if (inst->port->desc.a.local_id == local_id) {
+          return (sn_device_instance_t *)inst;
+        }
+        continue;
       }
       case DRIVER_TYPE_COMMAND_API: {
-        return inst->port->desc.c.local_id == local_id ? (sn_device_instance_t *)inst : NULL;
+        if (inst->port->desc.c.local_id == local_id) {
+          return (sn_device_instance_t *)inst;
+        }
+        continue;
       }
     }
   }
   return NULL;
 }
 
-// Find all sensors by type (first match)
+// Find all instance by type (first match)
 static inline sn_device_instance_t *find_instance_by_driver_name(const char *name) {
   if (!name) return NULL;
   for (int i = 0; i < gDeviceInstancesLen; ++i) {

@@ -1,3 +1,6 @@
+#include "freertos/idf_additions.h"
+#include "freertos/projdefs.h"
+#include "sn_common.h"
 #include "sn_driver/port_desc.h"
 #include "sn_json.h"
 #include "sn_driver_registry.h"
@@ -30,13 +33,23 @@ struct led_ctx_s {
   bool on;
 };
 
+static void led_task(void *pvParams) {
+  led_ctx_t *ctx = (led_ctx_t *)pvParams;
+
+  for (;;) {
+    if (ctx) {
+    }
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
+}
+
 // ----------------------------------------------------
 
 static const sn_param_desc_t params_desc[] = {
   {
    .name = "enable",
    .type = PTYPE_BOOL,
-   .required = false,
+   .required = true,
    },
   {
    .name = "brightness",
@@ -63,13 +76,11 @@ static bool led_probe(const sn_device_port_desc_t *port) {
 
 // ----------------------------------------------------
 static inline void led_set_brightness(float value, ledc_channel_t channel) {
-  if (value < 0.0f) value = 0.0f;
-  if (value > 1.0f) value = 1.0f;
+  value = CLAMP(value, 0.0f, 1.0f);
+  channel = CLAMP(channel, LEDC_CHANNEL_0, LEDC_CHANNEL_MAX);
   if (channel > LEDC_CHANNEL_MAX) {
     ESP_LOGE(TAG, "Maximum led channel reached (%d/%d)", channel, LEDC_CHANNEL_MAX);
-    channel = LEDC_CHANNEL_MAX;
   };
-  if (channel < LEDC_CHANNEL_0) channel = LEDC_CHANNEL_0;
   uint32_t duty = (uint32_t)(value * LEDC_MAX_DUTY);
   ledc_set_duty(LEDC_MODE, channel, duty);
   ledc_update_duty(LEDC_MODE, channel);
@@ -144,9 +155,13 @@ static void led_deinit(void *ctx) { (void)ctx; }
 // --------------------------------------------------------------------------------
 // Controller handler
 // --------------------------------------------------------------------------------
-static esp_err_t led_controller(void *ctxv, const char *paramsJsonStr, cJSON **out_result) {
-  if (!paramsJsonStr) return ESP_ERR_INVALID_ARG;
-  cJSON *paramsJson = cJSON_Parse(paramsJsonStr);
+static esp_err_t led_controller(void *ctxv, const cJSON *paramsJson, cJSON **out_result) {
+  if (!paramsJson) return ESP_ERR_INVALID_ARG;
+  if (!ctxv) {
+    ESP_LOGE(TAG, "Context is null");
+    return ESP_ERR_INVALID_STATE;
+  }
+  led_ctx_t *ctx = (led_ctx_t *)ctxv;
   cJSON *out = NULL;
   if (!paramsJson) return ESP_ERR_INVALID_ARG;
   if (!validate_params_json(params_desc, paramsJson, &out)) {
@@ -154,12 +169,15 @@ static esp_err_t led_controller(void *ctxv, const char *paramsJsonStr, cJSON **o
     return ESP_ERR_INVALID_ARG;
   }
 
-  led_ctx_t *ctx = (led_ctx_t *)ctxv;
-
-  json_get_bool(paramsJson, "enable", &ctx->on);
+  // apply conditionally
+  bool on = ctx->on;
+  if (json_get_bool(paramsJson, "enable", &on)) {
+    ctx->on = on;
+  }
   double value = 0;
-  json_get_number(paramsJson, "brightness", &value);
-  ctx->brightness = value;
+  if (json_get_number(paramsJson, "brightness", &value)) {
+    ctx->brightness = CLAMP(value, 0.0f, 1.0f);
+  }
 
   // Set light brightness
   if (ctx->on) {
@@ -168,8 +186,9 @@ static esp_err_t led_controller(void *ctxv, const char *paramsJsonStr, cJSON **o
     led_set_brightness(0, ctx->channel);
   }
 
-  cJSON_Delete(paramsJson);
-  if (out_result) *out_result = build_success_fmt(NULL);
+  if (out_result)
+    *out_result =
+      build_success_fmt("enable=%s, brightness=%.2f", ctx->on ? "true" : "false", ctx->brightness);
   return ESP_OK;
 }
 

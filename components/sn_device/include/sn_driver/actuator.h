@@ -15,6 +15,6 @@ typedef enum {
 } actuator_type_e;
 
 // control: used for actuators. params provided as simple name/value (cJSON could be used)
-typedef esp_err_t (*control_fn_t)(void *ctx, const char *paramsJson, cJSON **resultJsonOut);
+typedef esp_err_t (*control_fn_t)(void *ctx, const cJSON *paramsJson, cJSON **resultJsonOut);
 
 #endif // !SN_ACTUATOR_DRIVER_H

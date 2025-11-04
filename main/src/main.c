@@ -1,3 +1,4 @@
+#include "freertos/idf_additions.h"
 #include "freertos/projdefs.h"
 #include "sn_capability.h"
 #include "sn_error.h"
@@ -23,7 +24,6 @@
 #include "esp_err.h"
 #include <freertos/FreeRTOS.h>
 #include <sys/time.h>
-#include <time.h>
 
 #define WIFI_SSID CONFIG_ESP_WIFI_SSID
 #define WIFI_PASS CONFIG_ESP_WIFI_PASSWORD
@@ -32,9 +32,10 @@ static const char *TAG = "MAIN";
 
 extern void sensor_poll_task(void *pvParam);
 extern void status_poll_task(void *pvParam);
+
 static esp_err_t init_device_config();
-static esp_err_t start_mqtt_registration_verification();
 static esp_err_t init_drivers(void);
+static esp_err_t start_mqtt_registration_verification();
 
 // mqtt command callback
 static void on_command_msg(const char *topic, const char *payload) {
@@ -44,13 +45,14 @@ static void on_command_msg(const char *topic, const char *payload) {
   if (out) {
     char *payload_str = cJSON_PrintUnformatted(out);
     const sn_mqtt_topic_cache_t *cache = sn_mqtt_topic_cache_get();
-    sn_mqtt_publish(cache->command_ack_topic, payload_str, 1, false);
+    sn_mqtt_publish_enqueue(cache->command_ack_topic, payload_str, 1, false);
     cJSON_free(payload_str);
     cJSON_Delete(out);
   }
 }
 
 void app_main(void) {
+  // Init modules
   GOTO_IF_ESP_ERROR(end, sn_storage_init(NULL));
   GOTO_IF_ESP_ERROR(end, sn_inet_init(NULL));
   // Connect to the internet using wifi this will block and wait for the connection
@@ -60,40 +62,34 @@ void app_main(void) {
   GOTO_IF_ESP_ERROR(end, sn_init_sntp());
   // Wait for physical
   vTaskDelay(pdMS_TO_TICKS(2000));
+
   GOTO_IF_ESP_ERROR(end, init_drivers());
   GOTO_IF_ESP_ERROR(end, init_device_config());
   GOTO_IF_ESP_ERROR(end, start_mqtt_registration_verification());
 
-  // sn_storage_list_all();
-
   // create mqtt client
   const sn_mqtt_topic_cache_t *cache = sn_mqtt_topic_cache_get();
   {
-    // create timestamp
-    char isots[64];
-    sn_get_iso8601_timestamp(isots, sizeof(isots));
-
     // create lwt payload from timestamp
-    cJSON *payload = create_lwt_payload_json(isots);
+    cJSON *payload = create_lwt_payload_json();
     char *payload_str = cJSON_PrintUnformatted(payload);
-
     // create config and initialize
     sn_mqtt_config_t conf =
       {.uri = CONFIG_MQTT_BROKER_URI, .lwt_topic = cache->status_topic, .lwt_payload = payload_str};
     sn_mqtt_init(&conf);
-
     // clean up
     cJSON_free(payload_str);
     cJSON_Delete(payload);
   }
 
   sn_mqtt_start();
-  // Chờ kết nối rồi subscribe
-  vTaskDelay(pdMS_TO_TICKS(3000));
   sn_mqtt_router_subscriber_add(cache->command_topic, on_command_msg, 1);
 
-  sensor_poll_task(NULL);
+  xTaskCreatePinnedToCore(sensor_poll_task, "sensor_poll_task", 4096, NULL, 4, NULL, 0);
+  xTaskCreatePinnedToCore(status_poll_task, "status_task", 4096, NULL, 5, NULL, 1);
 end:
+  // vTaskDelay(pdMS_TO_TICKS(5000));
+  // esp_restart();
   (void)0;
 }
 
@@ -110,7 +106,10 @@ static esp_err_t init_device_config() {
     .orgId = CONFIG_ORG_ID,
     .clusterId = CONFIG_CLUSTER_ID,
   };
-  gen_temp_id(ctx.deviceId, sizeof(ctx.deviceId));
+
+  if (sn_storage_get_device_id(ctx.deviceId, sizeof(ctx.deviceId)) != ESP_OK) {
+    gen_temp_id(ctx.deviceId, sizeof(ctx.deviceId));
+  }
   sn_mqtt_topic_cache_init(&ctx);
 
   // sn_storage_get_org_id(ctx.orgId, sizeof(ctx.orgId));
@@ -121,7 +120,7 @@ static esp_err_t init_device_config() {
 
 static esp_err_t start_mqtt_registration_verification() {
   char device_id[64];
-  esp_err_t err = ESP_OK;
+  int err = 0;
   // Get device id from storage
   if (sn_storage_get_device_id(device_id, sizeof(device_id)) != ESP_OK) {
     // if not exist then register
@@ -132,20 +131,33 @@ static esp_err_t start_mqtt_registration_verification() {
     RETURN_IF_FALSE_MSG(TAG, payloadStr, ESP_FAIL, "payload is null");
 
     // Run the registration loop
-    if (mqtt_registration_run(CONFIG_MQTT_BROKER_URI, payloadStr) != ESP_OK) {
-      ESP_LOGE(TAG, "Register device failed restarting in 5s...");
-      vTaskDelay(pdMS_TO_TICKS(5000));
-      esp_restart();
-    } else {
+
+    if (mqtt_registration_run(CONFIG_MQTT_BROKER_URI, payloadStr) == ESP_OK) {
       sn_storage_get_device_id(device_id, sizeof(device_id));
+      ESP_LOGI(TAG, "Registration success");
+    } else {
+      sn_storage_erase_device_id();
+      err = -1;
     }
     cJSON_free(payloadStr);
     cJSON_Delete(capabilities_json);
   } else {
     // sent verify if deviceId exists
-    const char *payloadStr = "{\"firmwareVersion\": \"" CONFIG_FIRMWARE_VERSION "\"";
-    err = mqtt_verify_client_run(CONFIG_MQTT_BROKER_URI, payloadStr);
-    if (err != ESP_OK) return err;
+    const char *payloadStr = "{\"firmwareVersion\": \"" CONFIG_FIRMWARE_VERSION "\"}";
+    if (mqtt_verify_client_run(CONFIG_MQTT_BROKER_URI, payloadStr) != ESP_OK) {
+      ESP_LOGW(TAG, "Verification failed");
+      // erase device from nvs if not valid
+      sn_storage_erase_device_id();
+      err = -2;
+    } else {
+      ESP_LOGI(TAG, "Verification success");
+    }
+  }
+
+  if (err != 0) {
+    ESP_LOGE(TAG, "Failed with status: %d. Restarting in 5s...", err);
+    vTaskDelay(pdMS_TO_TICKS(5000));
+    esp_restart();
   }
 
   // Only valid device id can passthrough this
@@ -153,7 +165,7 @@ static esp_err_t start_mqtt_registration_verification() {
   sn_mqtt_topic_context_t newContext = *context;
   strncpy(newContext.deviceId, device_id, sizeof(newContext.deviceId));
   sn_mqtt_topic_cache_set_context(&newContext);
-  return ESP_OK;
+  return err;
 }
 
 static esp_err_t init_drivers(void) {
@@ -162,6 +174,7 @@ static esp_err_t init_drivers(void) {
   ESP_ERROR_CHECK_WITHOUT_ABORT(err = sn_driver_register(&dht_driver));
   ESP_ERROR_CHECK_WITHOUT_ABORT(err = sn_driver_register(&soil_moisture_driver));
   ESP_ERROR_CHECK_WITHOUT_ABORT(err = sn_driver_register(&light_intensity_driver));
+  ESP_ERROR_CHECK_WITHOUT_ABORT(err = sn_driver_register(&relay_driver));
   sn_driver_bind_all_ports(gDevicePorts, gDevicePortsLen);
   return err;
 }

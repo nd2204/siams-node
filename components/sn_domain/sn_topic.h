@@ -5,7 +5,7 @@
 #include "esp_err.h"
 #include "forward.h"
 
-#define MAX_TOPIC_LEN 256
+#define MAX_TOPIC_LEN 512
 
 #define TOPIC_BASE_FMT         "org/%s/cluster/%s/"
 #define TOPIC_DEV_FMT          "org/%s/cluster/%s/device/%s/"
@@ -53,7 +53,7 @@ void print_topic_cache(void);
 //--------------------------------------------------------------------------------
 // payload builder helpers for topics
 //--------------------------------------------------------------------------------
-cJSON *create_lwt_payload_json(const char *isots);
+cJSON *create_lwt_payload_json();
 
 cJSON *create_telemetry_payload_json(local_id_t localId, double value, const char *isots);
 

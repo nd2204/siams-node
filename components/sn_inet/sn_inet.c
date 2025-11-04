@@ -60,23 +60,20 @@ static void event_handler(
       if (sRetryNum < CONFIG_ESP_MAXIMUM_RETRY) {
         esp_wifi_connect();
         sRetryNum++;
-        ESP_LOGI(TAG, "Retrying... (%d/%d)", sRetryNum, CONFIG_ESP_MAXIMUM_RETRY);
       } else {
         xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-        ESP_LOGE(TAG, "Connect to the AP fail");
       }
-      fflush(stdout);
     }
   } else if (event_base == IP_EVENT) {
     if (event_id == IP_EVENT_STA_GOT_IP) {
       ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-      ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
+      ESP_LOGI(TAG, "got ip: " IPSTR, IP2STR(&event->ip_info.ip));
       sRetryNum = 0;
       xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
-    if (event_id == IP_EVENT_STA_LOST_IP) {
-      ESP_LOGI(TAG, "Lost connection to the ap");
-    }
+    // if (event_id == IP_EVENT_STA_LOST_IP) {
+    //   ESP_LOGI(TAG, "Lost connection to the ap");
+    // }
   }
 }
 
@@ -84,13 +81,14 @@ static void event_handler(
 static esp_err_t sn_init_wifi() {
   // Only log error, warning for wifi
   esp_log_level_set("wifi", ESP_LOG_WARN);
+  esp_log_level_set("wifi:sta", ESP_LOG_WARN);
   esp_log_level_set("wifi_init", ESP_LOG_WARN);
+  esp_log_level_set("phy", ESP_LOG_WARN);
+  esp_log_level_set("pm", ESP_LOG_WARN);
   // Init wifi event group
   s_wifi_event_group = xEventGroupCreate();
 
   // Init wifi driver
-  fflush(stdout);
-  vTaskDelay(pdMS_TO_TICKS(200));
   TRY(esp_netif_init());
   TRY(esp_event_loop_create_default());
   esp_netif_create_default_wifi_sta();
@@ -112,8 +110,6 @@ esp_err_t sn_inet_init(void *args) {
 
 esp_err_t sn_inet_wifi_connect(const char *ssid, const char *password) {
   if (!sWifiSystemActive) sn_init_wifi();
-  vTaskDelay(pdMS_TO_TICKS(1000)); // wait for init
-
   if (sIsConnected) return ESP_OK;
   // Assign wifi event handlers
   esp_event_handler_instance_t instance_any_id;
@@ -155,7 +151,7 @@ esp_err_t sn_inet_wifi_connect(const char *ssid, const char *password) {
   /* xEventGroupWaitBits() returns the bits before the call returned, hence we
    * can test which event actually happened. */
   if (bits & WIFI_CONNECTED_BIT) {
-    ESP_LOGI(TAG, "connected to ap SSID:%s", CONFIG_ESP_WIFI_SSID);
+    ESP_LOGI(TAG, "connected to ap SSID: %s", CONFIG_ESP_WIFI_SSID);
     sIsConnected = 1;
   } else if (bits & WIFI_FAIL_BIT) {
     ESP_LOGI(TAG, "Failed to connect to SSID: %s", CONFIG_ESP_WIFI_SSID);
@@ -166,6 +162,12 @@ esp_err_t sn_inet_wifi_connect(const char *ssid, const char *password) {
   vEventGroupDelete(s_wifi_event_group);
 
   return ESP_OK;
+}
+
+int sn_inet_get_wifi_rssi(void) {
+  wifi_ap_record_t info;
+  if (esp_wifi_sta_get_ap_info(&info) == ESP_OK) return info.rssi;
+  return -127; // disconnected or invalid
 }
 
 bool sn_inet_is_connected() { return sIsConnected; }

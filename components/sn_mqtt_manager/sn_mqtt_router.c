@@ -7,11 +7,10 @@
 
 #define MAX_TOPIC_HANDLERS 10
 
-static sn_mqtt_context_t ctx;
 static const char *TAG = "mqtt_router";
 
 typedef struct {
-  char topic[128];
+  char topic[256];
   sn_mqtt_message_handler_t handler;
 } topic_handler_entry_t;
 
@@ -23,7 +22,7 @@ static void on_mqtt_message(const char *topic, const char *payload, void *args) 
   ESP_LOGI(TAG, "Incoming: %s -> %s", topic, payload);
 
   for (size_t i = 0; i < registry_count; i++) {
-    if (strcmp(topic, registry[i].topic) == 0) {
+    if (strncmp(topic, registry[i].topic, sizeof(registry[i].topic)) == 0) {
       if (registry[i].handler) {
         registry[i].handler(topic, payload);
         return;
@@ -34,46 +33,10 @@ static void on_mqtt_message(const char *topic, const char *payload, void *args) 
   ESP_LOGW(TAG, "No handler found for topic: %s", topic);
 }
 
-esp_err_t sn_mqtt_router_init(const sn_mqtt_context_t *context) {
-  if (!context) {
-    return ESP_ERR_INVALID_ARG;
-  }
-  ctx = *context;
+esp_err_t sn_mqtt_router_init() {
   registry_count = 0;
   sn_mqtt_register_handler(on_mqtt_message, NULL);
-
-  ESP_LOGI(
-    TAG, "MQTT Subscriber initialized for %s/%s/%s", context->org_id, context->cluster_id,
-    context->device_id
-  );
   return ESP_OK;
-}
-
-esp_err_t sn_mqtt_router_publish_telemetry(const char *sensor_key, const char *payload) {
-  char topic[128];
-  // snprintf(topic, sizeof(topic), TOPIC_BASE "device/%s/telemetry/%s", ctx.device_id, sensor_key);
-  const sn_mqtt_topic_cache_t *cache = sn_mqtt_topic_cache_get();
-  snprintf(topic, sizeof(topic), cache->telemetry_topic, ctx.device_id);
-  ESP_LOGI(TAG, "Publish TELEMETRY -> %s", topic);
-  return sn_mqtt_publish(topic, payload, 1, false);
-}
-
-esp_err_t sn_mqtt_router_publish_status(const char *status_json) {
-  char topic[128];
-  snprintf(
-    topic, sizeof(topic), "org/%s/clusters/%s/device/%s/status", ctx.org_id, ctx.cluster_id,
-    ctx.device_id
-  );
-  return sn_mqtt_publish(topic, status_json, 1, false);
-}
-
-esp_err_t sn_mqtt_router_publish_event(const char *event_json) {
-  char topic[128];
-  snprintf(
-    topic, sizeof(topic), "org/%s/clusters/%s/device/%s/event", ctx.org_id, ctx.cluster_id,
-    ctx.device_id
-  );
-  return sn_mqtt_publish(topic, event_json, 1, false);
 }
 
 esp_err_t sn_mqtt_router_subscriber_add(

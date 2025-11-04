@@ -1,6 +1,7 @@
 #include "sn_topic.h"
 #include "cJSON.h"
 #include "esp_log.h"
+#include "sn_sntp.h"
 #include <string.h>
 
 void sn_init_topics() {}
@@ -13,7 +14,11 @@ static sn_mqtt_topic_cache_t cache;
   static inline void build_##name##_topic(                                                         \
     char *buf, size_t len, const char *org, const char *cluster, const char *device                \
   ) {                                                                                              \
-    snprintf(buf, len, fmt, org, cluster, device);                                                 \
+    int n = snprintf(buf, len, (fmt), org, cluster, device);                                       \
+    if (n < 0 || n >= len) {                                                                       \
+      ESP_LOGE(TAG, "topic truncated");                                                            \
+      return;                                                                                      \
+    }                                                                                              \
   }
 TOPIC_DEVICE_CONFIG(GEN_BUILD_TOPIC_FN)
 #undef GEN_BUILD_TOPIC_FN
@@ -54,7 +59,14 @@ esp_err_t sn_mqtt_topic_cache_set_context(const sn_mqtt_topic_context_t *context
   if (!context) return ESP_ERR_INVALID_ARG;
   memcpy(&ctx, context, sizeof(sn_mqtt_topic_context_t));
   memset(&cache, 0, sizeof(sn_mqtt_topic_cache_t));
-  ESP_LOGI(TAG, "MQTT topics rebuilt for %s/%s/%s", ctx.orgId, ctx.clusterId, ctx.deviceId);
+  ESP_LOGI(
+    TAG,
+    "MQTT topics rebuilt for"
+    "\n\torgId     =%s"
+    "\n\tclusterId =%s"
+    "\n\tdeviceId  =%s",
+    ctx.orgId, ctx.clusterId, ctx.deviceId
+  );
   rebuild_topics();
   return ESP_OK;
 }
@@ -67,11 +79,17 @@ const sn_mqtt_topic_cache_t *sn_mqtt_topic_cache_get(void) { return &cache; }
 // payload builders
 //--------------------------------------------------------------------------------
 
-cJSON *create_lwt_payload_json(const char *isots) {
+cJSON *create_lwt_payload_json() {
+  time_t now;
+  time(&now);
+  char isots[64];
+  sn_timestamp_to_iso8601(now, isots, sizeof(isots));
+
   cJSON *root = cJSON_CreateObject();
   if (!root) return NULL;
   cJSON_AddStringToObject(root, "ts", isots);
   cJSON_AddBoolToObject(root, "online", 0);
+
   return root;
 }
 

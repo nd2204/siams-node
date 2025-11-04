@@ -28,6 +28,13 @@ typedef struct sn_sensor_reading_s {
   time_t ts;
 } sn_sensor_reading_t;
 
+typedef struct sn_status_reading_s {
+  float mem;
+  float cpu;
+  int wifi;
+  time_t ts;
+} sn_status_reading_t;
+
 typedef struct {
   const char *unit;   // "C", "%"
   sensor_type_e type; // measurement type: TEMPERATURE etc
@@ -119,12 +126,14 @@ static inline sensor_type_e pm_get_type_by_local_id(
 /* --------------------------------------------------------------------
  *  Optional: pretty-print
  * ------------------------------------------------------------------*/
-static inline void pm_print(const sn_port_measurement_map_t *arr, const char *tag) {
+static inline void pm_print(
+  esp_log_level_t level, const sn_port_measurement_map_t *arr, const char *tag
+) {
   if (!arr) return;
   if (!tag) tag = "MEAS";
   FOR_EACH_MEASUREMENT(m, arr) {
-    ESP_LOGI(
-      tag, "Measurement %-12s | unit=%-5s | localId=0x%02X", get_sensor_type_str(m->type),
+    ESP_LOG_LEVEL(
+      level, tag, "Measurement %-12s | unit=%-5s | localId=0x%02X", get_sensor_type_str(m->type),
       m->unit ? m->unit : "-", m->local_id
     );
   }

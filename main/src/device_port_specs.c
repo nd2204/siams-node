@@ -49,7 +49,7 @@ const sn_device_port_desc_t gDevicePorts[] = {
   })),
   ACTUATOR_PORT_LITERAL("pump-1", "relay", ((sn_actuator_port_t){
     .local_id = 0x0c,
-    .usage.gpio.pin = GPIO_NUM_25,
+    .usage.gpio.pin = GPIO_NUM_5,
     .usage_type = PUT_GPIO,
   })),
 };

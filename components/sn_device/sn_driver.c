@@ -1,6 +1,7 @@
 #include "sn_driver.h"
 #include "esp_log.h"
 #include "sn_adc_helper.h"
+#include "sn_driver/driver_inst.h"
 
 #define MAX_DRIVERS 8
 
@@ -67,7 +68,7 @@ void sn_driver_bind_all_ports(const sn_device_port_desc_t *ports, size_t ports_l
 
     // create and assign ports to device instance
     sn_device_instance_t *inst = &gDeviceInstances[gDeviceInstancesLen];
-    memset(inst, 0, sizeof(*inst));
+    memset(inst, 0, sizeof(sn_device_instance_t));
     inst->port = p;
     inst->driver = best_drv;
     inst->interval_ms = 2000;
@@ -84,10 +85,28 @@ void sn_driver_bind_all_ports(const sn_device_port_desc_t *ports, size_t ports_l
       esp_err_t err = best_drv->init ? best_drv->init(p, &inst->ctx, sizeof(inst->ctx)) : ESP_OK;
       if (err == ESP_OK) {
         inst->online = true;
-        ESP_LOGW(
-          TAG, "Slot (%d): Bound %s '%s' -> driver '%s'", gDeviceInstancesLen, tstr, p->port_name,
-          best_drv->name
-        );
+        // optional printing for driver type
+        switch (inst->port->drv_type) {
+          case DRIVER_TYPE_SENSOR:
+            ESP_LOGW(
+              TAG, "[%02d]: Bound %s '%s' -> driver '%s'", gDeviceInstancesLen, tstr, p->port_name,
+              best_drv->name
+            );
+            pm_print(ESP_LOG_WARN, p->desc.s.measurements, TAG);
+            break;
+          case DRIVER_TYPE_ACTUATOR:
+            ESP_LOGW(
+              TAG, "[%02d][localId=%d]: Bound %s '%s' -> driver '%s'", gDeviceInstancesLen,
+              p->desc.a.local_id, tstr, p->port_name, best_drv->name
+            );
+            break;
+          case DRIVER_TYPE_COMMAND_API:
+            ESP_LOGW(
+              TAG, "[%02d][localId=%d]: Bound %s '%s' -> driver '%s'", gDeviceInstancesLen,
+              p->desc.c.local_id, tstr, p->port_name, best_drv->name
+            );
+            break;
+        }
       } else {
         inst->online = false;
         ESP_LOGW(
@@ -95,17 +114,8 @@ void sn_driver_bind_all_ports(const sn_device_port_desc_t *ports, size_t ports_l
         );
         if (best_drv->deinit) best_drv->deinit(&inst->ctx);
       }
-      // optional printing for driver type
-      switch (inst->port->drv_type) {
-        case DRIVER_TYPE_SENSOR:
-          pm_print(p->desc.s.measurements, TAG);
-          break;
-        case DRIVER_TYPE_ACTUATOR:
-        case DRIVER_TYPE_COMMAND_API:
-          break;
-      }
-      gDeviceInstancesLen++;
     }
+    gDeviceInstancesLen++;
   }
 
   ESP_LOGW(TAG, "Bound %d devices", gDeviceInstancesLen);

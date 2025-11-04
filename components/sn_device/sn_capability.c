@@ -1,4 +1,5 @@
 #include "sn_capability.h"
+#include "esp_err.h"
 #include "sdkconfig.h"
 #include "sn_driver.h"
 #include "sn_driver/driver_inst.h"
@@ -155,19 +156,25 @@ int dispatch_command(const char *payload_json, cJSON **out_result) {
   }
 
   const sn_command_desc_t *command_desc = inst->driver->command_desc;
-  if (!command_desc || !strncmp(command_desc->action, action, strlen(command_desc->action))) {
-    if (out_result) *out_result = build_error_fmt("\"action\": (%s) doesn't supported");
+  if (!command_desc || strncmp(command_desc->action, action, strlen(command_desc->action)) != 0) {
+    if (out_result) *out_result = build_error_fmt("\"action\": \"%s\" unsupported", action);
     cJSON_Delete(root);
     return -4;
   }
 
   if (!inst->driver->control) {
-    if (out_result) *out_result = build_error_fmt("\"action\": (%s) doesn't supported");
+    if (out_result)
+      *out_result = build_error_fmt("\"action\": \"%s\" missing control callback", action);
     cJSON_Delete(root);
     return -5;
   }
 
-  int r = inst->driver->control((void *)&inst->ctx, payload_json, &result);
+  cJSON *params = cJSON_GetObjectItemCaseSensitive(root, "params");
+  int r = inst->driver->control((void *)&inst->ctx, params, &result);
+
+  if (r != ESP_OK) {
+    ESP_LOGE(TAG, "%s Encountered an error (%s)", inst->port->port_name, esp_err_to_name(r));
+  }
   if (out_result) *out_result = result;
 
   cJSON_Delete(root);

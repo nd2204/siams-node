@@ -22,7 +22,7 @@ typedef struct {
   size_t params_count;
 } sn_command_desc_t;
 
-bool validate_params_json(const sn_param_desc_t *desc, cJSON *params, cJSON **err_out);
+bool validate_params_json(const sn_param_desc_t *desc, const cJSON *params, cJSON **err_out);
 
 cJSON *command_desc_to_json(const sn_command_desc_t *desc);
 
@@ -38,7 +38,7 @@ bool json_get_number(const cJSON *root, const char *key, double *out_val);
 
 bool json_get_int(const cJSON *root, const char *key, int *out_val);
 
-bool json_get_object(const cJSON *root, const char *key, const cJSON **out_val);
+bool json_get_object(const cJSON *root, const char *key, cJSON **out_val);
 
 bool json_get_string(const cJSON *root, const char *key, const char **out_val);
 

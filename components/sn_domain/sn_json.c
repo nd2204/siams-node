@@ -17,7 +17,22 @@ cJSON *json_create_string_fmt(const char *fmt, ...) {
   return cJSON_CreateString(buf);
 }
 
-bool validate_params_json(const sn_param_desc_t *desc, cJSON *params, cJSON **err_out) {
+const char *cjson_type_to_name(int type) {
+  // clang-format off
+  if (type & cJSON_Invalid) { return "Invalid"; }
+  if (type & cJSON_False  ) { return "False"; }
+  if (type & cJSON_True   ) { return "True"; }
+  if (type & cJSON_NULL   ) { return "NULL"; }
+  if (type & cJSON_Number ) { return "Number"; }
+  if (type & cJSON_String ) { return "String"; }
+  if (type & cJSON_Array  ) { return "Array"; }
+  if (type & cJSON_Object ) { return "Object"; }
+  if (type & cJSON_Raw    ) { return "Raw"; }
+  return "Error";
+  // clang-format on
+}
+
+bool validate_params_json(const sn_param_desc_t *desc, const cJSON *params, cJSON **err_out) {
   if (!desc || !params) return false;
   for (const sn_param_desc_t *pd = desc; pd && pd->name; ++pd) {
     cJSON *it = cJSON_GetObjectItemCaseSensitive(params, pd->name);
@@ -25,59 +40,72 @@ bool validate_params_json(const sn_param_desc_t *desc, cJSON *params, cJSON **er
       if (pd->required) {
         if (err_out) *err_out = build_error_fmt("missing required param '%s'", pd->name);
         return false;
-      } else
-        continue;
-    }
-    switch (pd->type) {
-      case PTYPE_INT:
-        if (!cJSON_IsNumber(it) || (it->valuedouble != (double)(it->valueint))) {
-          if (err_out) *err_out = build_error_fmt("param '%s' must be integer", pd->name);
-          return false;
-        }
-        if (pd->min != pd->max) { // treat min/max default values carefully
-          if (it->valueint < (int)pd->min || it->valueint > (int)pd->max) {
-            if (err_out) *err_out = build_error_fmt("param '%s' out of range", pd->name);
+      }
+      continue;
+    } else {
+      switch (pd->type) {
+        case PTYPE_INT:
+          if (!cJSON_IsNumber(it) || (it->valuedouble != (double)(it->valueint))) {
+            if (err_out)
+              *err_out = build_error_fmt(
+                "param '%s' (%s) must be integer", cjson_type_to_name(it->type), pd->name
+              );
             return false;
           }
-        }
-        break;
-      case PTYPE_NUMBER:
-        if (!cJSON_IsNumber(it)) {
-          if (err_out) *err_out = build_error_fmt("param '%s' must be number", pd->name);
-          return false;
-        }
-        if (pd->min != pd->max) {
-          if (it->valuedouble < pd->min || it->valuedouble > pd->max) {
-            if (err_out) *err_out = build_error_fmt("param '%s' out of range", pd->name);
-            return false;
-          }
-        }
-        break;
-      case PTYPE_BOOL:
-        if (!cJSON_IsBool(it)) {
-          if (err_out) *err_out = build_error_fmt("param '%s' must be boolean", pd->name);
-          return false;
-        }
-        break;
-      case PTYPE_STRING:
-        if (!cJSON_IsString(it)) {
-          if (err_out) *err_out = build_error_fmt("param '%s' must be string", pd->name);
-          return false;
-        }
-        if (pd->enum_values) {
-          bool found = false;
-          for (const char **ev = pd->enum_values; ev && *ev; ++ev) {
-            if (strcmp(*ev, it->valuestring) == 0) {
-              found = true;
-              break;
+          if (pd->min != pd->max) { // treat min/max default values carefully
+            if (it->valueint < (int)pd->min || it->valueint > (int)pd->max) {
+              if (err_out) *err_out = build_error_fmt("param '%s' out of range", pd->name);
+              return false;
             }
           }
-          if (!found) {
-            if (err_out) *err_out = build_error_fmt("param '%s' unexpected value", pd->name);
+          break;
+        case PTYPE_NUMBER:
+          if (!cJSON_IsNumber(it)) {
+            if (err_out)
+              *err_out = build_error_fmt(
+                "param '%s' (%s) must be number", cjson_type_to_name(it->type), pd->name
+              );
             return false;
           }
-        }
-        break;
+          if (pd->min != pd->max) {
+            if (it->valuedouble < pd->min || it->valuedouble > pd->max) {
+              if (err_out) *err_out = build_error_fmt("param '%s' out of range", pd->name);
+              return false;
+            }
+          }
+          break;
+        case PTYPE_BOOL:
+          if (!cJSON_IsBool(it)) {
+            if (err_out)
+              *err_out = build_error_fmt(
+                "param '%s' (%s) must be boolean", cjson_type_to_name(it->type), pd->name
+              );
+            return false;
+          }
+          break;
+        case PTYPE_STRING:
+          if (!cJSON_IsString(it)) {
+            if (err_out)
+              *err_out = build_error_fmt(
+                "param '%s' (%s) must be string %s", cjson_type_to_name(it->type), pd->name
+              );
+            return false;
+          }
+          if (pd->enum_values) {
+            bool found = false;
+            for (const char **ev = pd->enum_values; ev && *ev; ++ev) {
+              if (strcmp(*ev, it->valuestring) == 0) {
+                found = true;
+                break;
+              }
+            }
+            if (!found) {
+              if (err_out) *err_out = build_error_fmt("param '%s' unexpected value", pd->name);
+              return false;
+            }
+          }
+          break;
+      }
     }
   }
   // check for extra/unexpected props if needed
@@ -151,16 +179,26 @@ cJSON *sensor_reading_to_json_obj(const sn_sensor_reading_t *m) {
 
 cJSON *build_success_fmt(const char *fmt, ...) {
   cJSON *result = cJSON_CreateObject();
-
-  if (fmt != NULL) {
-    va_list args;
-    va_start(args, fmt);
-    cJSON_AddItemToObject(result, "message", json_create_string_fmt(fmt, args));
-    va_end(args);
-  }
-
   if (!result) return NULL;
   cJSON_AddItemToObject(result, "status", cJSON_CreateString("success"));
+
+  if (fmt == NULL) {
+    return result;
+  }
+
+  char buf[128];
+  va_list args;
+  va_start(args, fmt);
+  int written = vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+  buf[sizeof(buf) - 1] = '\0'; // ensure null-termination
+
+  if (written < 0) {
+    cJSON_AddStringToObject(result, "message", "format error");
+  } else {
+    cJSON_AddStringToObject(result, "message", buf);
+  }
+
   return result;
 }
 
@@ -204,8 +242,8 @@ bool json_get_int(const cJSON *root, const char *key, int *out_val) {
   return true;
 }
 
-bool json_get_object(const cJSON *root, const char *key, const cJSON **out_val) {
-  const cJSON *item = cJSON_GetObjectItemCaseSensitive(root, key);
+bool json_get_object(const cJSON *root, const char *key, cJSON **out_val) {
+  cJSON *item = cJSON_GetObjectItemCaseSensitive(root, key);
   if (!cJSON_IsObject(item)) return false;
   *out_val = item;
   return true;

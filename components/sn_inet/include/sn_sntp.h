@@ -9,6 +9,10 @@
 
 esp_err_t sn_init_sntp(void);
 
+esp_err_t sn_wait_for_timesync();
+
+void sn_sync_time();
+
 bool sn_is_time_synced(time_t timestamp);
 
 void sn_get_iso8601_timestamp(char *buffer, size_t buffer_size);

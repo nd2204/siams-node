@@ -1,8 +1,50 @@
 #include "sn_sntp.h"
 #include "esp_sntp.h"
 #include "esp_log.h"
+#include "freertos/idf_additions.h"
+#include "freertos/projdefs.h"
 
 static const char *TAG = "time_sync";
+static EventGroupHandle_t s_time_event_group;
+
+#define TIME_SYNCED_BIT      BIT0
+#define TIME_SYNCED_FAIL_BIT BIT1
+
+static void timesync_task(void *pvParams) {
+  time_t now = 0;
+  struct tm timeinfo = {0};
+  int retry = 0;
+  const int retry_count = 10;
+
+  while (timeinfo.tm_year < (2016 - 1900) && ++retry < retry_count) {
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    time(&now);
+    localtime_r(&now, &timeinfo);
+  }
+
+  if (timeinfo.tm_year < (2016 - 1900)) {
+    xEventGroupSetBits(s_time_event_group, TIME_SYNCED_FAIL_BIT);
+  } else {
+    xEventGroupSetBits(s_time_event_group, TIME_SYNCED_BIT);
+  }
+  vTaskDelete(NULL);
+}
+
+esp_err_t sn_wait_for_timesync() {
+  EventBits_t bits = xEventGroupWaitBits(
+    s_time_event_group, TIME_SYNCED_FAIL_BIT | TIME_SYNCED_BIT, pdTRUE, pdFALSE,
+    pdMS_TO_TICKS(10000)
+  );
+  if (bits & TIME_SYNCED_BIT) {
+    ESP_LOGI(TAG, "Time synchronized");
+    return ESP_OK;
+  } else {
+    ESP_LOGE(TAG, "Time sync failed");
+    return ESP_FAIL;
+  }
+}
+
+void sn_sync_time() { xTaskCreate(timesync_task, "timesync_task", 1024, NULL, 5, NULL); }
 
 esp_err_t sn_init_sntp(void) {
   ESP_LOGI(TAG, "Initializing SNTP");
@@ -10,26 +52,11 @@ esp_err_t sn_init_sntp(void) {
   esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
   esp_sntp_setservername(0, "pool.ntp.org");
   esp_sntp_init();
+  sn_sync_time();
 
-  // Wait for time to be set
-  time_t now = 0;
-  struct tm timeinfo = {0};
-  int retry = 0;
-  const int retry_count = 10;
-  while (timeinfo.tm_year < (2016 - 1900) && ++retry < retry_count) {
-    ESP_LOGI(TAG, "Waiting for system time to be set... (%d/%d)", retry, retry_count);
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
-    time(&now);
-    localtime_r(&now, &timeinfo);
-  }
-
-  if (timeinfo.tm_year < (2016 - 1900)) {
-    ESP_LOGE(TAG, "Time sync failed");
-    return ESP_FAIL;
-  } else {
-    ESP_LOGI(TAG, "Time synchronized");
-    return ESP_OK;
-  }
+  s_time_event_group = xEventGroupCreate();
+  ESP_LOGI(TAG, "Waiting for system time to be set... ");
+  return sn_wait_for_timesync();
 }
 
 bool sn_is_time_synced(time_t timestamp) {
