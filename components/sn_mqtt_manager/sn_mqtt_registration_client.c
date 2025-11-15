@@ -14,6 +14,7 @@
 static const char *TAG = "SN_MQTT_REG_CLIENT";
 static esp_mqtt_client_handle_t reg_client = NULL;
 static EventGroupHandle_t mqtt_evt_group;
+static cJSON *rx_payload = NULL;
 
 #define MQTT_CONNECTED_BIT BIT0
 #define MQTT_ACK_RECEIVED  BIT1
@@ -56,22 +57,21 @@ static void mqtt_event_handler(void *args, esp_event_base_t base, int32_t eid, v
       break;
     }
     case MQTT_EVENT_DATA: {
-      cJSON *json = parse_rx_payload(event);
-      if (!json) break;
+      rx_payload = parse_rx_payload(event);
+      if (!rx_payload) break;
       // char *payload_str = cJSON_PrintUnformatted(json);
       // if (payload_str) {
       //   ESP_LOGI(TAG, "RX: %s", payload_str);
       //   cJSON_free(payload_str);
       // }
 
-      if (json_get_string(json, "deviceId", &device_id_rx)) {
+      if (json_get_string(rx_payload, "deviceId", &device_id_rx)) {
         ESP_LOGI(TAG, "Device registered successfully: %s", device_id_rx);
         sn_storage_set_device_id(device_id_rx);
         xEventGroupSetBits(mqtt_evt_group, MQTT_ACK_RECEIVED);
       } else {
         xEventGroupSetBits(mqtt_evt_group, MQTT_ACK_ERROR);
       }
-      cJSON_Delete(json);
       break;
     }
     default:
@@ -121,11 +121,20 @@ esp_err_t mqtt_registration_run(const char *broker_uri, const char *register_pay
       return ESP_OK;
     } else if (bits & MQTT_ACK_ERROR) {
       ESP_LOGE(TAG, "Error ack received!");
+      if (rx_payload) {
+        char *str = cJSON_Print(rx_payload);
+        ESP_LOGE(TAG, "Error ack payload: %s", str);
+        cJSON_free(str);
+      }
       return ESP_FAIL;
     } else {
       ESP_LOGE(TAG, "Timeout waiting for ack");
       return ESP_FAIL;
     }
+  }
+
+  if (rx_payload) {
+    cJSON_Delete(rx_payload);
   }
 
   return ESP_FAIL;

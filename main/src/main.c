@@ -9,6 +9,7 @@
 #include "sn_mqtt_verify_client.h"
 // internet and time
 #include "sn_inet.h"
+#include "sn_rules/sn_rule_engine.h"
 #include "sn_sntp.h"
 // persistence
 #include "sn_storage.h"
@@ -52,6 +53,7 @@ static void on_command_msg(const char *topic, const char *payload) {
 }
 
 void app_main(void) {
+  GOTO_IF_ESP_ERROR(end, init_drivers());
   // Init modules
   GOTO_IF_ESP_ERROR(end, sn_storage_init(NULL));
   GOTO_IF_ESP_ERROR(end, sn_inet_init(NULL));
@@ -60,33 +62,31 @@ void app_main(void) {
   GOTO_IF_FALSE_MSG(end, sn_inet_is_connected(), TAG, "Network is not available");
   // Init sntp server and sync time
   GOTO_IF_ESP_ERROR(end, sn_init_sntp());
-  // Wait for physical
-  vTaskDelay(pdMS_TO_TICKS(2000));
-
-  GOTO_IF_ESP_ERROR(end, init_drivers());
   GOTO_IF_ESP_ERROR(end, init_device_config());
+
+  // Register the device to the backend for deviceId
+  // Verify the existing deviceId otherwise
   GOTO_IF_ESP_ERROR(end, start_mqtt_registration_verification());
 
   // create mqtt client
   const sn_mqtt_topic_cache_t *cache = sn_mqtt_topic_cache_get();
-  {
-    // create lwt payload from timestamp
-    cJSON *payload = create_lwt_payload_json();
-    char *payload_str = cJSON_PrintUnformatted(payload);
-    // create config and initialize
-    sn_mqtt_config_t conf =
-      {.uri = CONFIG_MQTT_BROKER_URI, .lwt_topic = cache->status_topic, .lwt_payload = payload_str};
-    sn_mqtt_init(&conf);
-    // clean up
-    cJSON_free(payload_str);
-    cJSON_Delete(payload);
-  }
+  // create lwt payload from timestamp
+  cJSON *payload = create_lwt_payload_json();
+  char *payload_str = cJSON_PrintUnformatted(payload);
+  // create config and initialize
+  sn_mqtt_config_t conf =
+    {.uri = CONFIG_MQTT_BROKER_URI, .lwt_topic = cache->status_topic, .lwt_payload = payload_str};
+  sn_mqtt_init(&conf);
+  // clean up
+  cJSON_free(payload_str);
+  cJSON_Delete(payload);
 
   sn_mqtt_start();
   sn_mqtt_router_subscriber_add(cache->command_topic, on_command_msg, 1);
 
   xTaskCreatePinnedToCore(sensor_poll_task, "sensor_poll_task", 4096, NULL, 4, NULL, 0);
   xTaskCreatePinnedToCore(status_poll_task, "status_task", 4096, NULL, 5, NULL, 1);
+  xTaskCreatePinnedToCore(rule_engine_task, "rule_engine_task", 4096, NULL, 5, NULL, 1);
 end:
   // vTaskDelay(pdMS_TO_TICKS(5000));
   // esp_restart();
@@ -146,8 +146,6 @@ static esp_err_t start_mqtt_registration_verification() {
     const char *payloadStr = "{\"firmwareVersion\": \"" CONFIG_FIRMWARE_VERSION "\"}";
     if (mqtt_verify_client_run(CONFIG_MQTT_BROKER_URI, payloadStr) != ESP_OK) {
       ESP_LOGW(TAG, "Verification failed");
-      // erase device from nvs if not valid
-      sn_storage_erase_device_id();
       err = -2;
     } else {
       ESP_LOGI(TAG, "Verification success");
@@ -175,6 +173,7 @@ static esp_err_t init_drivers(void) {
   ESP_ERROR_CHECK_WITHOUT_ABORT(err = sn_driver_register(&soil_moisture_driver));
   ESP_ERROR_CHECK_WITHOUT_ABORT(err = sn_driver_register(&light_intensity_driver));
   ESP_ERROR_CHECK_WITHOUT_ABORT(err = sn_driver_register(&relay_driver));
+  ESP_ERROR_CHECK_WITHOUT_ABORT(err = sn_driver_register(&screen_i2c_driver));
   sn_driver_bind_all_ports(gDevicePorts, gDevicePortsLen);
   return err;
 }

@@ -133,6 +133,18 @@ bool validate_params_json(const sn_param_desc_t *desc, const cJSON *params, cJSO
 
 static const char *ptype_str[] = {"int", "number", "boolean", "string"};
 
+cJSON *sn_command_to_payload_json(const sn_command_t *command) {
+  if (!command) return NULL;
+  cJSON *params_obj = cJSON_Parse(command->params_json);
+  if (!params_obj) return NULL;
+
+  cJSON *payload_obj = cJSON_CreateObject();
+  cJSON_AddNumberToObject(payload_obj, "localId", command->local_id);
+  cJSON_AddStringToObject(payload_obj, "action", command->action);
+  cJSON_AddItemToObject(payload_obj, "params", params_obj);
+  return payload_obj;
+}
+
 cJSON *command_desc_to_json(const sn_command_desc_t *desc) {
   if (!desc) return NULL;
   cJSON *schema = cJSON_CreateObject();
@@ -141,20 +153,18 @@ cJSON *command_desc_to_json(const sn_command_desc_t *desc) {
   cJSON_AddStringToObject(schema, "action", desc->action);
 
   // Skip if no params
-  if (desc->params_count < 1) {
+  if (!desc->params || !desc->params->name) {
     return schema;
   }
-  const sn_param_desc_t *params = desc->params;
   cJSON *params_obj = cJSON_AddArrayToObject(schema, "params");
-  for (int i = 0; i < desc->params_count; i++) {
+  FOREACH_PARAMS_DESC(it, desc->params) {
     cJSON *arg_obj = cJSON_CreateObject();
 
-    cJSON_AddStringToObject(arg_obj, "name", params[i].name);
-    cJSON_AddStringToObject(arg_obj, "type", ptype_str[params[i].type]);
-    const char **it = params[i].enum_values;
-    if (it && *it) {
+    cJSON_AddStringToObject(arg_obj, "name", it->name);
+    cJSON_AddStringToObject(arg_obj, "type", ptype_str[it->type]);
+    if (it->enum_values) {
       cJSON *enum_arr = cJSON_AddArrayToObject(arg_obj, "enums");
-      for (; *it; i++) {
+      FOREACH_ENUM_VALUES(it, it->enum_values) {
         cJSON_AddItemToArray(enum_arr, cJSON_CreateString(*it));
       }
     }
@@ -170,10 +180,7 @@ cJSON *sensor_reading_to_json_obj(const sn_sensor_reading_t *m) {
   }
   cJSON_AddNumberToObject(mo, "localId", m->local_id);
   cJSON_AddNumberToObject(mo, "value", m->value);
-  char buffer[128];
-  sn_timestamp_to_iso8601(m->ts, buffer, sizeof(buffer));
-  cJSON_AddStringToObject(mo, "ts", buffer);
-
+  cJSON_AddNumberToObject(mo, "ts", m->ts);
   return mo;
 }
 

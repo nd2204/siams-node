@@ -56,6 +56,30 @@ const char *get_chip_model_str(esp_chip_model_t model) {
   return "Unknown";
 }
 
+/* Result payload sample:
+ * {
+ *   model: "ESP32",
+ *   firmwareVersion: "v1.0.0",
+ *   capabilities: {
+ *     sensors: [
+ *       {localId: 1, name: 'temp-1', type: 'dht11', unit: "C"},
+ *       ...
+ *     ],
+ *     actuators: [
+ *       {localId: 2, name: 'pump-1', type: 'PUMP'},
+ *       ...
+ *     ],
+ *     commands: [
+ *       {localId: 2, commands: [
+ *         {action: "control_relay", params: [
+ *           { name: "enable", type: "boolean" },
+ *           { name: "duration_sec", type: "int" }
+ *         ]}
+ *       ]}
+ *     ]
+ *   }
+ * }
+ */
 cJSON *device_ports_to_capabilities_json() {
   if (gDevicePortsLen <= 0) {
     ESP_LOGW(TAG, "No ports defined");
@@ -69,6 +93,11 @@ cJSON *device_ports_to_capabilities_json() {
   cJSON *actuator_capability = cJSON_AddArrayToObject(capability_obj, "actuators");
   cJSON *command_capability = cJSON_AddArrayToObject(capability_obj, "commands");
 
+  cJSON *location_obj = cJSON_AddObjectToObject(json, "location");
+  // TODO: Add a GPS module?
+  cJSON_AddNumberToObject(location_obj, "lat", 21.047324478422933);
+  cJSON_AddNumberToObject(location_obj, "lon", 105.78543402753904);
+
   esp_chip_info_t chip_info;
   esp_chip_info(&chip_info);
 
@@ -76,45 +105,103 @@ cJSON *device_ports_to_capabilities_json() {
   cJSON_AddItemToObject(json, "firmwareVersion", cJSON_CreateString(CONFIG_FIRMWARE_VERSION));
 
   FOR_EACH_INSTANCE(it, gDeviceInstances, gDeviceInstancesLen) {
+    cJSON *command_obj = cJSON_CreateObject();
+    cJSON *command_array = cJSON_AddArrayToObject(command_obj, "commands");
     cJSON *command = create_command_capability_json(it->driver);
+    if (command) cJSON_AddItemToArray(command_array, command);
+
     switch (it->port->drv_type) {
       case DRIVER_TYPE_SENSOR: {
         FOR_EACH_MEASUREMENT(m_it, it->port->desc.s.measurements) {
           cJSON *entry = cJSON_CreateObject();
           cJSON_AddNumberToObject(entry, "localId", m_it->local_id);
           cJSON_AddStringToObject(entry, "type", sensorTypeStr[m_it->type]);
+          cJSON_AddItemToObject(entry, "name", cJSON_CreateString(it->port->port_name));
           cJSON_AddStringToObject(entry, "unit", m_it->unit);
-          if (command) {
-            cJSON_AddItemToObject(entry, "command", command);
-          }
           cJSON_AddItemToArray(sensor_capability, entry);
+          if (command) {
+            cJSON_AddNumberToObject(command_obj, "localId", m_it->local_id);
+            cJSON_AddItemToArray(command_capability, command_obj);
+          }
         }
       } break;
       case DRIVER_TYPE_ACTUATOR: {
         const sn_actuator_port_t *a = &it->port->desc.a;
         cJSON *entry = cJSON_CreateObject();
         cJSON_AddItemToObject(entry, "localId", cJSON_CreateNumber(a->local_id));
+        cJSON_AddItemToObject(entry, "name", cJSON_CreateString(it->port->port_name));
         cJSON_AddItemToObject(entry, "type", cJSON_CreateString(it->port->drv_name));
-        if (command) {
-          cJSON_AddItemToObject(entry, "command", command);
-        }
         cJSON_AddItemToArray(actuator_capability, entry);
+        if (command) {
+          cJSON_AddNumberToObject(command_obj, "localId", a->local_id);
+          cJSON_AddItemToArray(command_capability, command_obj);
+        }
       } break;
       case DRIVER_TYPE_COMMAND_API: {
         const sn_command_api_port_t *c = &it->port->desc.c;
-        cJSON *entry = cJSON_CreateObject();
-        cJSON_AddItemToObject(entry, "localId", cJSON_CreateNumber(c->local_id));
-        cJSON_AddItemToObject(entry, "type", cJSON_CreateString(it->port->drv_name));
         if (command) {
-          cJSON_AddNumberToObject(command, "localId", c->local_id);
-          cJSON_AddItemToArray(command_capability, command);
+          cJSON_AddItemToObject(command_obj, "localId", cJSON_CreateNumber(c->local_id));
+          cJSON_AddItemToObject(command_obj, "name", cJSON_CreateString(it->port->port_name));
+          cJSON_AddItemToObject(command_obj, "type", cJSON_CreateString(it->port->drv_name));
+          cJSON_AddItemToArray(command_capability, command_obj);
         }
-        cJSON_AddItemToArray(command_capability, entry);
         continue;
       }
     }
   }
   return json;
+}
+
+int sn_dispatch_command_struct(const sn_command_t *command, cJSON **out_result) {
+  cJSON *result = NULL;
+
+  if (command->local_id > LOCAL_ID_MAX || command->local_id < LOCAL_ID_MIN) {
+    if (out_result)
+      *out_result = build_error_fmt(
+        "Invalid field \"localId\": %d (min: %d) (max: %d)", command->local_id, LOCAL_ID_MIN,
+        LOCAL_ID_MAX
+      );
+    return -2;
+  }
+
+  const sn_device_instance_t *inst = find_instance_by_local_id((uint8_t)command->local_id);
+  if (!inst) {
+    if (out_result) {
+      *out_result =
+        build_error_fmt("Cannot found any command associated with localId=%d", command->local_id);
+    }
+    return -2;
+  }
+
+  if (!command->action) {
+    if (out_result) *out_result = build_error_fmt("Invalid or missing field \"action\"");
+    return -3;
+  }
+
+  const sn_command_desc_t *command_desc = inst->driver->command_desc;
+  if (!command_desc
+      || strncmp(command_desc->action, command->action, strlen(command_desc->action)) != 0) {
+    if (out_result)
+      *out_result = build_error_fmt("\"action\": \"%s\" unsupported", command->action);
+    return -4;
+  }
+
+  if (!inst->driver->control) {
+    if (out_result)
+      *out_result = build_error_fmt("\"action\": \"%s\" missing control callback", command->action);
+    return -5;
+  }
+
+  cJSON *params = cJSON_Parse(command->params_json);
+  int r = inst->driver->control((void *)&inst->ctx, params, &result);
+
+  if (r != ESP_OK) {
+    ESP_LOGE(TAG, "%s Encountered an error (%s)", inst->port->port_name, esp_err_to_name(r));
+  }
+
+  if (params) cJSON_Delete(params);
+  if (out_result) *out_result = result;
+  return r;
 }
 
 // pseudo: command JSON format from backend:

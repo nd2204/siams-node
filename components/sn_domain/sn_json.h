@@ -9,22 +9,46 @@ typedef enum { PTYPE_INT = 0, PTYPE_NUMBER, PTYPE_BOOL, PTYPE_STRING } ptype_t;
 
 typedef struct {
   const char *name;
-  const char **enum_values; // NULL-terminated if used for strings
-  double min;               // use only for numeric
+
+  // NULL-terminated string enums
+  const char **enum_values;
+
+  // use only for numeric types
+  double min;
   double max;
-  ptype_t type;
+
+  ptype_t type; // PTYPE_INT, PTYPE_BOOL, ...
   bool required;
 } sn_param_desc_t;
 
 typedef struct {
   const char *action;
   const sn_param_desc_t *params;
-  size_t params_count;
 } sn_command_desc_t;
 
-bool validate_params_json(const sn_param_desc_t *desc, const cJSON *params, cJSON **err_out);
+#define FOREACH_PARAMS_DESC(it, params)                                                            \
+  for (const sn_param_desc_t *it = (params); it && (it->name); it++)
+
+#define FOREACH_ENUM_VALUES(it, enums) for (const char **it = (it); it; it++)
 
 cJSON *command_desc_to_json(const sn_command_desc_t *desc);
+
+typedef struct {
+  local_id_t local_id;
+  const char *action;
+  const char *params_json;
+} sn_command_t;
+
+#define COMMAND_NULL_ENTRY                                                                         \
+  (sn_command_t) { .action = NULL, .local_id = 0, .params_json = NULL }
+
+#define FOREACH_COMMAND(it, commands)                                                              \
+  for (const sn_command_t *it = (commands); it && (it->action); it++)
+
+cJSON *sn_command_to_payload_json(const sn_command_t *command);
+
+// Utils
+bool validate_params_json(const sn_param_desc_t *desc, const cJSON *params, cJSON **err_out);
 
 cJSON *build_error_fmt(const char *reason, ...);
 

@@ -2,3 +2,4 @@ dependencies:
   espressif/bh1750: ^2.0.0
   espressif/cjson: ^1.7.19
   zorxx/dht: '*'
+  lvgl/lvgl: 9.2.0

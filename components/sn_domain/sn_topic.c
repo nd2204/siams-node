@@ -82,12 +82,10 @@ const sn_mqtt_topic_cache_t *sn_mqtt_topic_cache_get(void) { return &cache; }
 cJSON *create_lwt_payload_json() {
   time_t now;
   time(&now);
-  char isots[64];
-  sn_timestamp_to_iso8601(now, isots, sizeof(isots));
 
   cJSON *root = cJSON_CreateObject();
   if (!root) return NULL;
-  cJSON_AddStringToObject(root, "ts", isots);
+  cJSON_AddNumberToObject(root, "ts", now);
   cJSON_AddBoolToObject(root, "online", 0);
 
   return root;

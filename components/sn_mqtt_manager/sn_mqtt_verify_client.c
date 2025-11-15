@@ -105,6 +105,8 @@ esp_err_t mqtt_verify_client_run(const char *broker_uri, const char *verify_payl
       return ESP_OK;
     } else if (bits & MQTT_ACK_ERROR) {
       ESP_LOGE(TAG, "Error ack received!");
+      // erase device from nvs if not valid
+      sn_storage_erase_device_id();
       return ESP_FAIL;
     } else {
       ESP_LOGE(TAG, "Timeout waiting for ack");

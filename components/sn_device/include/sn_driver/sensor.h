@@ -68,7 +68,7 @@ typedef esp_err_t (*read_multi_fn_t)(
 // Count valid entries (until name == NULL)
 static inline const char *get_sensor_type_str(sensor_type_e type) {
   static const char *sensorTypeStr[] = {
-#define STR(x) #x,
+#define STR(x) TO_STR(x),
     SENSOR_TYPE(STR)
 #undef STR
   };

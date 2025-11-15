@@ -87,25 +87,26 @@ void sn_driver_bind_all_ports(const sn_device_port_desc_t *ports, size_t ports_l
         inst->online = true;
         // optional printing for driver type
         switch (inst->port->drv_type) {
-          case DRIVER_TYPE_SENSOR:
+          case DRIVER_TYPE_SENSOR: {
+            inst->interval_ms = p->desc.s.sample_rate_ms;
             ESP_LOGW(
-              TAG, "[%02d]: Bound %s '%s' -> driver '%s'", gDeviceInstancesLen, tstr, p->port_name,
-              best_drv->name
+              TAG, "[%02d]: Bound %s '%s' -> driver '%s' sample_rate=%d", gDeviceInstancesLen, tstr,
+              p->port_name, best_drv->name, inst->interval_ms
             );
             pm_print(ESP_LOG_WARN, p->desc.s.measurements, TAG);
-            break;
-          case DRIVER_TYPE_ACTUATOR:
+          } break;
+          case DRIVER_TYPE_ACTUATOR: {
             ESP_LOGW(
               TAG, "[%02d][localId=%d]: Bound %s '%s' -> driver '%s'", gDeviceInstancesLen,
               p->desc.a.local_id, tstr, p->port_name, best_drv->name
             );
-            break;
-          case DRIVER_TYPE_COMMAND_API:
+          } break;
+          case DRIVER_TYPE_COMMAND_API: {
             ESP_LOGW(
               TAG, "[%02d][localId=%d]: Bound %s '%s' -> driver '%s'", gDeviceInstancesLen,
               p->desc.c.local_id, tstr, p->port_name, best_drv->name
             );
-            break;
+          } break;
         }
       } else {
         inst->online = false;

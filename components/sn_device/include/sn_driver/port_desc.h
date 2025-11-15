@@ -20,8 +20,8 @@ typedef enum {
 } sn_port_usage_type_e;
 
 typedef union {
-  struct { gpio_num_t pin;          } gpio;
-  struct { int addr;                } i2c;
+  struct { gpio_num_t pin; } gpio;
+  struct { int addr; gpio_num_t sda; gpio_num_t scl; } i2c;
   struct { int host; gpio_num_t cs; } spi;
 } sn_port_usage_u;
 // clang-format on
@@ -31,6 +31,7 @@ typedef struct {
   sn_port_usage_u usage;
   sn_port_usage_type_e usage_type;
   int measurements_count;
+  uint32_t sample_rate_ms;
 } sn_sensor_port_t;
 
 typedef struct {
@@ -66,5 +67,14 @@ typedef struct {
 
 #define COMMAND_PORT_LITERAL(PORT_NAME, DRV_NAME, DESC)                                            \
   {.port_name = PORT_NAME, .desc.a = DESC, .drv_type = DRIVER_TYPE_COMMAND, .drv_name = DRV_NAME}
+
+#define DEFINE_SENSOR_PORT_CONST_VAR(VAR_NAME, PORT_NAME, DRV_NAME, DESC)                          \
+  const sn_device_port_desc_t VAR_NAME = SENSOR_PORT_LITERAL(PORT_NAME, DRV_NAME, DESC);
+
+#define DEFINE_ACTUATOR_PORT_CONST_VAR(VAR_NAME, PORT_NAME, DRV_NAME, DESC)                        \
+  const sn_device_port_desc_t VAR_NAME = ACTUATOR_PORT_LITERAL(PORT_NAME, DRV_NAME, DESC);
+
+#define DEFINE_COMMAND_PORT_CONST_VAR(VAR_NAME, PORT_NAME, DRV_NAME, DESC)                         \
+  const sn_device_port_desc_t VAR_NAME = COMMAND_PORT_LITERAL(PORT_NAME, DRV_NAME, DESC);
 
 #endif // !SN_PORT_DESC_H

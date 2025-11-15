@@ -64,7 +64,6 @@ static const sn_param_desc_t params_desc[] = {
 static const sn_command_desc_t schema = {
   .action = "control_led",
   .params = params_desc,
-  .params_count = (sizeof(params_desc) / sizeof(sn_param_desc_t)) - 1 // minus the NULL terminate
 };
 
 // ----------------------------------------------------
@@ -162,10 +161,8 @@ static esp_err_t led_controller(void *ctxv, const cJSON *paramsJson, cJSON **out
     return ESP_ERR_INVALID_STATE;
   }
   led_ctx_t *ctx = (led_ctx_t *)ctxv;
-  cJSON *out = NULL;
   if (!paramsJson) return ESP_ERR_INVALID_ARG;
-  if (!validate_params_json(params_desc, paramsJson, &out)) {
-    if (out && out_result) *out_result = out;
+  if (!validate_params_json(params_desc, paramsJson, out_result)) {
     return ESP_ERR_INVALID_ARG;
   }
 

@@ -14,7 +14,7 @@ static void timesync_task(void *pvParams) {
   time_t now = 0;
   struct tm timeinfo = {0};
   int retry = 0;
-  const int retry_count = 10;
+  const int retry_count = 30;
 
   while (timeinfo.tm_year < (2016 - 1900) && ++retry < retry_count) {
     vTaskDelay(pdMS_TO_TICKS(1000));
@@ -33,7 +33,7 @@ static void timesync_task(void *pvParams) {
 esp_err_t sn_wait_for_timesync() {
   EventBits_t bits = xEventGroupWaitBits(
     s_time_event_group, TIME_SYNCED_FAIL_BIT | TIME_SYNCED_BIT, pdTRUE, pdFALSE,
-    pdMS_TO_TICKS(10000)
+    pdMS_TO_TICKS(15000)
   );
   if (bits & TIME_SYNCED_BIT) {
     ESP_LOGI(TAG, "Time synchronized");

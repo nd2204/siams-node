@@ -73,12 +73,12 @@ static esp_err_t dht_read_multi(
 ) {
   if (!ctxv || !out_buf || max_out < 2 || !out_count) return ESP_ERR_INVALID_ARG;
   dht_ctx_t *ctx = (dht_ctx_t *)ctxv;
-  int64_t now_ms = esp_timer_get_time() / 1000ULL;
+  uint64_t now_ms = esp_timer_get_time() / 1000ULL;
 
   // use cache to serve multiple measurements without re-reading hardware often
   if (!ctx->cached || (now_ms - ctx->last_read_ms) > 3000) {
     float t = 0.0f, h = 0.0f;
-    esp_err_t r = dht_read_float_data(ctx->dht_type, ctx->pin, &t, &h);
+    esp_err_t r = dht_read_float_data(ctx->dht_type, ctx->pin, &h, &t);
     if (r != ESP_OK) {
       ctx->cached = false;
       return r;

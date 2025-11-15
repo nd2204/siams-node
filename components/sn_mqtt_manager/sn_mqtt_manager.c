@@ -7,6 +7,7 @@
 #include "sn_mqtt_router.h"
 #include "sn_sntp.h"
 #include "sn_storage.h"
+#include "sn_telemetry_queue.h"
 #include "sn_topic.h"
 #include <string.h>
 #include "freertos/idf_additions.h"
@@ -95,11 +96,13 @@ esp_err_t sn_mqtt_init(const sn_mqtt_config_t *cfg) {
     return ESP_ERR_INVALID_ARG;
   }
 
+  // WARN: ensure each string got sufficient len so they don't overflow
+  // to the next buffer
   char mqtt_user[64] = {0};
   char mqtt_pass[64] = {0};
   char lwt_payload[64] = {0};
-  char lwt_topic[128] = {0};
   char broker_uri[128] = {0};
+  char lwt_topic[MAX_TOPIC_LEN] = {0};
 
   s_mqtt_pubq = xQueueCreate(16, sizeof(mqtt_publish_msg_t));
   if (!s_mqtt_pubq) return ESP_ERR_NO_MEM;
@@ -119,7 +122,8 @@ esp_err_t sn_mqtt_init(const sn_mqtt_config_t *cfg) {
     .session.last_will.topic = lwt_topic[0] ? lwt_topic : NULL,
     .session.last_will.msg = lwt_payload[0] ? lwt_payload : NULL,
     .session.last_will.retain = true,
-    .session.last_will.qos = 1
+    .session.last_will.qos = 1,
+    .session.keepalive = 10
   };
 
   client = esp_mqtt_client_init(&mqtt_cfg);
@@ -203,14 +207,12 @@ esp_err_t publish_status(const sn_status_reading_t *status) {
   mqtt_publish_msg_t msg = {.type = MSG_STATUS, .qos = 0, .retain = false};
   const char *topic = sn_mqtt_topic_cache_get()->status_topic;
 
-  char isots[32];
-  sn_timestamp_to_iso8601(status->ts, isots, sizeof(isots));
   cJSON *json = cJSON_CreateObject();
   cJSON_AddNumberToObject(json, "cpu", status->cpu);
   cJSON_AddNumberToObject(json, "mem", status->mem);
   cJSON_AddNumberToObject(json, "wifi", status->wifi);
   cJSON_AddBoolToObject(json, "online", true);
-  cJSON_AddStringToObject(json, "ts", isots);
+  cJSON_AddNumberToObject(json, "ts", status->ts);
   char *json_str = cJSON_PrintUnformatted(json);
 
   strncpy(msg.topic, topic, sizeof(msg.topic));

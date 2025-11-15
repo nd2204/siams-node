@@ -62,7 +62,6 @@ static const sn_param_desc_t params_desc[] = {
 static const sn_command_desc_t schema = {
   .action = "control_relay",
   .params = params_desc,
-  .params_count = ((sizeof(params_desc) / sizeof(sn_param_desc_t)) - 1)
 };
 
 static _Bool relay_probe(const sn_device_port_desc_t *port) { return true; }

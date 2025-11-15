@@ -3,6 +3,7 @@
 
 #include "cJSON.h"
 #include "sn_driver/port_desc.h"
+#include "sn_json.h"
 #include <stdint.h>
 
 #define LOCAL_ID_MAX 0xff
@@ -21,5 +22,6 @@ typedef struct {
 cJSON *device_ports_to_capabilities_json();
 
 int dispatch_command(const char *payload_json, cJSON **out_result);
+int sn_dispatch_command_struct(const sn_command_t *command, cJSON **out_result);
 
 #endif // !SN_CAPABILITY_H
