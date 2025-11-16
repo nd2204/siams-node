@@ -168,12 +168,9 @@ static esp_err_t start_mqtt_registration_verification() {
 
 static esp_err_t init_drivers(void) {
   esp_err_t err = ESP_OK;
-  ESP_ERROR_CHECK_WITHOUT_ABORT(err = sn_driver_register(&led_driver));
-  ESP_ERROR_CHECK_WITHOUT_ABORT(err = sn_driver_register(&dht_driver));
-  ESP_ERROR_CHECK_WITHOUT_ABORT(err = sn_driver_register(&soil_moisture_driver));
-  ESP_ERROR_CHECK_WITHOUT_ABORT(err = sn_driver_register(&light_intensity_driver));
-  ESP_ERROR_CHECK_WITHOUT_ABORT(err = sn_driver_register(&relay_driver));
-  ESP_ERROR_CHECK_WITHOUT_ABORT(err = sn_driver_register(&screen_i2c_driver));
+#define X(driver) ESP_ERROR_CHECK_WITHOUT_ABORT(err = sn_driver_register(&driver##_driver));
+  DRIVERS(X)
+#undef X
   sn_driver_bind_all_ports(gDevicePorts, gDevicePortsLen);
   return err;
 }

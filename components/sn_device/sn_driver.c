@@ -3,7 +3,7 @@
 #include "sn_adc_helper.h"
 #include "sn_driver/driver_inst.h"
 
-#define MAX_DRIVERS 8
+#define MAX_DRIVERS 16
 
 static const char *TAG = "SN_DRIVER";
 static const sn_driver_desc_t *driver_registry[MAX_DRIVERS];
@@ -19,7 +19,7 @@ size_t gDeviceInstancesLen = 0;
 static bool supports_driver(const sn_driver_desc_t *d, const char *name) {
   if (!d || !name || !d->supported_types) return false;
   for (const char **p = d->supported_types; *p; ++p) {
-    if (strcmp(*p, name) == 0) return true;
+    if (strncmp(*p, name, strlen(name)) == 0) return true;
   }
   return false;
 }
@@ -59,7 +59,7 @@ void sn_driver_bind_all_ports(const sn_device_port_desc_t *ports, size_t ports_l
       const sn_driver_desc_t *d = driver_registry[j];
       if (!supports_driver(d, p->drv_name)) continue;
       // protective locking for i2c/spi if needed would occur here
-      bool ok = d->probe ? d->probe(p) : false;
+      bool ok = d->probe ? d->probe(p) : true;
       if (ok && d->priority > best_prio) {
         best_drv = d;
         best_prio = d->priority;

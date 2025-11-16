@@ -17,7 +17,6 @@ void sensor_poll_task(void *pvParam) {
       // check schedule
       if ((now_ms - it->last_read_ms) < it->interval_ms) continue;
       if (!it->online || !it->driver || !it->driver->read_multi) continue;
-
       int outcount = 0;
       esp_err_t r = it->driver->read_multi((void *)&it->ctx, readings, sizeof(readings), &outcount);
       if (r == ESP_OK && outcount > 0) {

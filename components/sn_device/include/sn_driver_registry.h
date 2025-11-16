@@ -10,7 +10,8 @@
   X(relay)                                                                                         \
   X(soil_moisture)                                                                                 \
   X(light_intensity)                                                                               \
-  X(screen_i2c)
+  X(screen_i2c)                                                                                    \
+  X(sensor_control)
 
 #define FORWARD_DECLARE_CTX_DRIVER_EXTERN(DRV_NAME)                                                \
   struct DRV_NAME##_ctx_s;                                                                         \
@@ -30,7 +31,6 @@ DRIVERS(FORWARD_DECLARE_CTX_DRIVER_EXTERN);
   static const sn_command_desc_t schema = {                                                        \
     .action = NULL,                                                                                \
     .params = params_desc,                                                                         \
-    .params_count = ((sizeof(params_desc) / sizeof(sn_param_desc_t)) - 1)                          \
   };                                                                                               \
   static bool DRV_NAME##_probe(const sn_device_port_desc_t *port) {}                               \
   static esp_err_t DRV_NAME##_init(                                                                \

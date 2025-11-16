@@ -143,7 +143,7 @@ static inline void print_instance(const sn_device_instance_t *inst) {
 }
 
 // Find instance by localId
-static inline sn_device_instance_t *find_instance_by_local_id(uint8_t local_id) {
+static inline sn_device_instance_t *sn_find_instance_by_local_id(uint8_t local_id) {
   FOR_EACH_INSTANCE(inst, gDeviceInstances, gDeviceInstancesLen) {
     switch (inst->port->drv_type) {
       case DRIVER_TYPE_SENSOR: {

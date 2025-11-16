@@ -164,7 +164,7 @@ int sn_dispatch_command_struct(const sn_command_t *command, cJSON **out_result) 
     return -2;
   }
 
-  const sn_device_instance_t *inst = find_instance_by_local_id((uint8_t)command->local_id);
+  const sn_device_instance_t *inst = sn_find_instance_by_local_id((uint8_t)command->local_id);
   if (!inst) {
     if (out_result) {
       *out_result =
@@ -226,7 +226,7 @@ int dispatch_command(const char *payload_json, cJSON **out_result) {
     return -2;
   }
 
-  const sn_device_instance_t *inst = find_instance_by_local_id((uint8_t)id);
+  const sn_device_instance_t *inst = sn_find_instance_by_local_id((uint8_t)id);
   if (!inst) {
     if (out_result)
       *out_result =

@@ -41,8 +41,6 @@ typedef struct {
 } sn_actuator_port_t;
 
 typedef struct {
-  sn_port_usage_u usage;
-  sn_port_usage_type_e usage_type;
   local_id_t local_id;
 } sn_command_api_port_t;
 
@@ -66,7 +64,10 @@ typedef struct {
   {.port_name = PORT_NAME, .desc.a = DESC, .drv_type = DRIVER_TYPE_ACTUATOR, .drv_name = DRV_NAME}
 
 #define COMMAND_PORT_LITERAL(PORT_NAME, DRV_NAME, DESC)                                            \
-  {.port_name = PORT_NAME, .desc.a = DESC, .drv_type = DRIVER_TYPE_COMMAND, .drv_name = DRV_NAME}
+  {.port_name = PORT_NAME,                                                                         \
+   .desc.c = DESC,                                                                                 \
+   .drv_type = DRIVER_TYPE_COMMAND_API,                                                            \
+   .drv_name = DRV_NAME}
 
 #define DEFINE_SENSOR_PORT_CONST_VAR(VAR_NAME, PORT_NAME, DRV_NAME, DESC)                          \
   const sn_device_port_desc_t VAR_NAME = SENSOR_PORT_LITERAL(PORT_NAME, DRV_NAME, DESC);

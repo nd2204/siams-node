@@ -1,6 +1,7 @@
 #ifndef SN_DRIVER_INSTANCE_H
 #define SN_DRIVER_INSTANCE_H
 
+#include "esp_err.h"
 #include "sn_driver/driver_desc.h"
 #include "sn_driver/port_desc.h"
 
@@ -32,5 +33,12 @@ typedef struct {
   bool                         online;
 } sn_device_instance_t;
 //clang-format on
+
+static inline esp_err_t sn_device_instance_set_interval(sn_device_instance_t*inst, uint64_t new_interval) {
+  if (!inst->online) return ESP_FAIL;
+  if (new_interval <= 0) return ESP_ERR_INVALID_ARG;
+  inst->interval_ms = new_interval;
+  return ESP_OK;
+}
 
 #endif // !SN_DRIVER_INSTANCE_H

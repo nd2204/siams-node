@@ -1,9 +1,11 @@
+#include "esp_err.h"
 #include "sn_driver/sensor.h"
 #include "sn_driver_registry.h"
 
 #include "dht.h"
 #include "esp_timer.h"
 #include "esp_log.h"
+#include "sn_json.h"
 #include "soc/gpio_num.h"
 #include <stdbool.h>
 #include <string.h>

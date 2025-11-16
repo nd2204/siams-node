@@ -56,37 +56,45 @@ static const sn_port_measurement_map_t light1_map[] = {
 
 #define ACTUATOR_PORT_DESCS(X)                                                                     \
   X(led_yellow, "led-yellow", "led",                                                               \
-    ((sn_actuator_port_t){.local_id = 0x0a,                                                        \
+    ((sn_actuator_port_t){.local_id = 0x0A,                                                        \
                           .usage.gpio.pin = GPIO_NUM_18,                                           \
                           .usage_type = PUT_GPIO}))                                                \
   X(led_green, "led-green", "led",                                                                 \
-    ((sn_actuator_port_t){.local_id = 0x0b,                                                        \
+    ((sn_actuator_port_t){.local_id = 0x0B,                                                        \
                           .usage.gpio.pin = GPIO_NUM_19,                                           \
                           .usage_type = PUT_GPIO}))                                                \
   X(                                                                                               \
     led_red, "led-red", "led",                                                                     \
-    ((sn_actuator_port_t){.local_id = 0x0c, .usage.gpio.pin = GPIO_NUM_3, .usage_type = PUT_GPIO}) \
+    ((sn_actuator_port_t){.local_id = 0x0C, .usage.gpio.pin = GPIO_NUM_3, .usage_type = PUT_GPIO}) \
   )                                                                                                \
   X(pump_1, "pump-1", "relay",                                                                     \
     ((sn_actuator_port_t){                                                                         \
-      .local_id = 0x0d,                                                                            \
+      .local_id = 0x0D,                                                                            \
       .usage.gpio.pin = GPIO_NUM_5,                                                                \
       .usage_type = PUT_GPIO,                                                                      \
     }))                                                                                            \
   X(oled, "oled-screen", "ssd1306",                                                                \
     ((sn_actuator_port_t){                                                                         \
-      .local_id = 0x0e,                                                                            \
+      .local_id = 0x0E,                                                                            \
       .usage.i2c.scl = GPIO_NUM_22,                                                                \
       .usage.i2c.sda = GPIO_NUM_21,                                                                \
       .usage_type = PUT_I2C,                                                                       \
     }))
 
+#define COMMAND_PORT_DESC(X)                                                                       \
+  X(sensor_control, "sensor control", "sensor_control",                                            \
+    ((sn_command_api_port_t){                                                                      \
+      .local_id = 0x7E,                                                                            \
+    }))
+
 SENSOR_PORT_DESCS(DEFINE_SENSOR_PORT_CONST_VAR)
 ACTUATOR_PORT_DESCS(DEFINE_ACTUATOR_PORT_CONST_VAR);
+COMMAND_PORT_DESC(DEFINE_COMMAND_PORT_CONST_VAR);
 
 const sn_device_port_desc_t gDevicePorts[] = {
 #define DEVICE_PORTS_LIST(VAR_NAME, ...) VAR_NAME,
   SENSOR_PORT_DESCS(DEVICE_PORTS_LIST) ACTUATOR_PORT_DESCS(DEVICE_PORTS_LIST)
+    COMMAND_PORT_DESC(DEVICE_PORTS_LIST)
 #undef DEVICE_PORTS_LIST
 };
 
