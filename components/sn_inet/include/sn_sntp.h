@@ -17,6 +17,8 @@ bool sn_is_time_synced(time_t timestamp);
 
 void sn_get_iso8601_timestamp(char *buffer, size_t buffer_size);
 
+unsigned long long sn_get_unix_timestamp_ms();
+
 void sn_timestamp_to_iso8601(time_t timestamp, char *buffer, size_t buffer_size);
 
 #endif // !SN_SNTP_H

@@ -30,7 +30,7 @@ menu "Device configuration"
 
     config FIRMWARE_VERSION
         string "Firmware version (semantic)"
-        default ""
+        default "v1.0.0"
 
 endmenu
 

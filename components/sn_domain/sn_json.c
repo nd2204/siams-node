@@ -231,34 +231,44 @@ cJSON *build_error_fmt(const char *reason, ...) {
 bool json_get_bool(const cJSON *root, const char *key, bool *out_val) {
   const cJSON *item = cJSON_GetObjectItemCaseSensitive(root, key);
   if (!cJSON_IsBool(item)) return false;
-  *out_val = cJSON_IsTrue(item);
+  if (out_val) {
+    *out_val = cJSON_IsTrue(item);
+  }
   return true;
 }
 
 bool json_get_number(const cJSON *root, const char *key, double *out_val) {
   const cJSON *item = cJSON_GetObjectItemCaseSensitive(root, key);
   if (!cJSON_IsNumber(item)) return false;
-  *out_val = cJSON_GetNumberValue(item);
+  if (out_val) {
+    *out_val = cJSON_GetNumberValue(item);
+  }
   return true;
 }
 
 bool json_get_int(const cJSON *root, const char *key, int *out_val) {
   const cJSON *item = cJSON_GetObjectItemCaseSensitive(root, key);
   if (!cJSON_IsNumber(item)) return false;
-  *out_val = (int)cJSON_GetNumberValue(item);
+  if (out_val) {
+    *out_val = (int)cJSON_GetNumberValue(item);
+  }
   return true;
 }
 
 bool json_get_object(const cJSON *root, const char *key, cJSON **out_val) {
   cJSON *item = cJSON_GetObjectItemCaseSensitive(root, key);
   if (!cJSON_IsObject(item)) return false;
-  *out_val = item;
+  if (out_val) {
+    *out_val = item;
+  }
   return true;
 }
 
 bool json_get_string(const cJSON *root, const char *key, const char **out_val) {
   const cJSON *item = cJSON_GetObjectItemCaseSensitive(root, key);
   if (!cJSON_IsString(item)) return false;
-  *out_val = item->valuestring;
+  if (out_val) {
+    *out_val = item->valuestring;
+  }
   return true;
 }

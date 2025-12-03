@@ -1,15 +1,13 @@
-#include "freertos/idf_additions.h"
-#include "freertos/projdefs.h"
+#include "esp_random.h"
 #include "sn_capability.h"
 #include "sn_error.h"
 // mqtt
 #include "sn_mqtt_router.h"
 #include "sn_mqtt_manager.h"
-#include "sn_mqtt_registration_client.h"
-#include "sn_mqtt_verify_client.h"
 // internet and time
 #include "sn_inet.h"
 #include "sn_rules/sn_rule_engine.h"
+#include "sn_security.h"
 #include "sn_sntp.h"
 // persistence
 #include "sn_storage.h"
@@ -51,7 +49,6 @@ static void on_command_msg(const char *topic, const char *payload) {
     cJSON_Delete(out);
   }
 }
-
 void app_main(void) {
   GOTO_IF_ESP_ERROR(end, init_drivers());
   // Init modules
@@ -71,7 +68,7 @@ void app_main(void) {
   // create mqtt client
   const sn_mqtt_topic_cache_t *cache = sn_mqtt_topic_cache_get();
   // create lwt payload from timestamp
-  cJSON *payload = create_lwt_payload_json();
+  cJSON *payload = sn_security_sign_and_wrap_payload(create_lwt_payload_json());
   char *payload_str = cJSON_PrintUnformatted(payload);
   // create config and initialize
   sn_mqtt_config_t conf =
@@ -95,22 +92,18 @@ end:
 
 static esp_err_t init_device_config() {
   // WARN: We should remove cluster config and move to provisioning api
-  // for avoid rebuilding
+  // to avoid rebuilding
 
-  // Init cluster id
-  if (CONFIG_CLUSTER_ID[0] != '\0') sn_storage_set_cluster_id(CONFIG_CLUSTER_ID);
   // Init organization id
   if (CONFIG_ORG_ID[0] != '\0') sn_storage_set_org_id(CONFIG_ORG_ID);
 
-  sn_mqtt_topic_context_t ctx = {
-    .orgId = CONFIG_ORG_ID,
-    .clusterId = CONFIG_CLUSTER_ID,
-  };
-
+  sn_mqtt_topic_context_t ctx = {.orgId = CONFIG_ORG_ID};
   if (sn_storage_get_device_id(ctx.deviceId, sizeof(ctx.deviceId)) != ESP_OK) {
-    gen_temp_id(ctx.deviceId, sizeof(ctx.deviceId));
+    uint32_t r = esp_random();
+    snprintf(ctx.deviceId, sizeof(ctx.deviceId), "temp-%08lx", r);
   }
   sn_mqtt_topic_cache_init(&ctx);
+  print_topic_cache();
 
   // sn_storage_get_org_id(ctx.orgId, sizeof(ctx.orgId));
   // sn_storage_get_cluster_id(ctx.clusterId, sizeof(ctx.clusterId));
@@ -118,52 +111,36 @@ static esp_err_t init_device_config() {
   return ESP_OK;
 }
 
+extern esp_err_t register_device();
+extern esp_err_t verify_device();
+extern esp_err_t recover_device();
+
 static esp_err_t start_mqtt_registration_verification() {
   char device_id[64];
-  int err = 0;
+  char device_secret[65];
+  bool has_id = sn_storage_get_device_id(device_id, sizeof(device_id)) == ESP_OK;
+  bool has_secret = sn_storage_get_device_secret(device_secret, sizeof(device_secret)) == ESP_OK;
+  esp_err_t ok = ESP_OK;
   // Get device id from storage
-  if (sn_storage_get_device_id(device_id, sizeof(device_id)) != ESP_OK) {
-    // if not exist then register
-    ESP_LOGW(TAG, "Device not registered, running registration...");
-    cJSON *capabilities_json = device_ports_to_capabilities_json();
-    RETURN_IF_FALSE_MSG(TAG, capabilities_json, ESP_FAIL, "capabilities json is null");
-    char *payloadStr = cJSON_PrintUnformatted(capabilities_json);
-    RETURN_IF_FALSE_MSG(TAG, payloadStr, ESP_FAIL, "payload is null");
+  if (!has_id)
+    ESP_LOGW(TAG, "device_id not found");
+  else
+    ESP_LOGI(TAG, "device_id found: %s", device_id);
+  if (!has_secret)
+    ESP_LOGW(TAG, "device_secret not found");
+  else
+    ESP_LOGI(TAG, "device_secret found: %s", device_secret);
 
-    // Run the registration loop
+  ok = !has_id ? (has_secret ? recover_device() : register_device()) :
+                 (has_secret ? verify_device() : ESP_ERR_INVALID_STATE);
 
-    if (mqtt_registration_run(CONFIG_MQTT_BROKER_URI, payloadStr) == ESP_OK) {
-      sn_storage_get_device_id(device_id, sizeof(device_id));
-      ESP_LOGI(TAG, "Registration success");
-    } else {
-      sn_storage_erase_device_id();
-      err = -1;
-    }
-    cJSON_free(payloadStr);
-    cJSON_Delete(capabilities_json);
-  } else {
-    // sent verify if deviceId exists
-    const char *payloadStr = "{\"firmwareVersion\": \"" CONFIG_FIRMWARE_VERSION "\"}";
-    if (mqtt_verify_client_run(CONFIG_MQTT_BROKER_URI, payloadStr) != ESP_OK) {
-      ESP_LOGW(TAG, "Verification failed");
-      err = -2;
-    } else {
-      ESP_LOGI(TAG, "Verification success");
-    }
-  }
-
-  if (err != 0) {
-    ESP_LOGE(TAG, "Failed with status: %d. Restarting in 5s...", err);
+  if (ok != ESP_OK) {
+    ESP_LOGE(TAG, "Failed with error: %d(%s). Restarting in 5s...", ok, esp_err_to_name(ok));
     vTaskDelay(pdMS_TO_TICKS(5000));
     esp_restart();
   }
 
-  // Only valid device id can passthrough this
-  const sn_mqtt_topic_context_t *context = sn_mqtt_topic_cache_get_context();
-  sn_mqtt_topic_context_t newContext = *context;
-  strncpy(newContext.deviceId, device_id, sizeof(newContext.deviceId));
-  sn_mqtt_topic_cache_set_context(&newContext);
-  return err;
+  return ok;
 }
 
 static esp_err_t init_drivers(void) {

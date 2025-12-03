@@ -6,6 +6,7 @@
 #include "esp_timer.h"
 #include "esp_log.h"
 #include "sn_json.h"
+#include "sn_sntp.h"
 #include "soc/gpio_num.h"
 #include <stdbool.h>
 #include <string.h>
@@ -91,8 +92,7 @@ static esp_err_t dht_read_multi(
     ctx->cached = true;
   }
 
-  time_t now = 0;
-  time(&now);
+  unsigned long long now = sn_get_unix_timestamp_ms();
 
   out_buf[0].local_id = ctx->temperature_id;
   out_buf[0].value = ctx->last_temp;

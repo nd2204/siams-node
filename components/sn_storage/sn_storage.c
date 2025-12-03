@@ -75,6 +75,7 @@ esp_err_t sn_storage_erase_key(const char *key) {
 // --------------------------------------------------------------------------------
 
 DEFINE_GETTER_SETTER_DELETE(device_id)
+DEFINE_GETTER_SETTER_DELETE(device_secret)
 DEFINE_GETTER_SETTER_DELETE(device_capabilities)
 DEFINE_GETTER_SETTER_DELETE(org_id)
 DEFINE_GETTER_SETTER_DELETE(cluster_id)

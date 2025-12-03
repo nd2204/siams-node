@@ -55,6 +55,7 @@ void sn_storage_list_all(void);
 // Device Info
 // --------------------------------------------------------------------------------
 DECLARE_GETTER_SETTER_DELETE(device_id);
+DECLARE_GETTER_SETTER_DELETE(device_secret);
 DECLARE_GETTER_SETTER_DELETE(device_capabilities);
 DECLARE_GETTER_SETTER_DELETE(org_id);
 DECLARE_GETTER_SETTER_DELETE(cluster_id);

@@ -5,6 +5,7 @@
 #include "sn_driver_registry.h"
 
 #include "esp_log.h"
+#include "sn_sntp.h"
 #include "soc/gpio_num.h"
 #include <stdbool.h>
 #include <string.h>
@@ -69,8 +70,6 @@ static esp_err_t soil_moisture_read_multi(
 ) {
   if (!ctxv || !out_buf) return ESP_ERR_INVALID_ARG;
 
-  time_t now;
-
   soil_moisture_ctx_t *c = (soil_moisture_ctx_t *)ctxv;
   int raw = adc_helper_read_raw_avg(c->channel, 4);
   if (raw < 0) return ESP_FAIL;
@@ -81,9 +80,8 @@ static esp_err_t soil_moisture_read_multi(
   uint32_t wet = c->wet_mv;
   if (dry == wet) return ESP_ERR_INVALID_STATE;
 
-  time(&now);
   out_buf[0].local_id = c->sensor_id;
-  out_buf[0].ts = now;
+  out_buf[0].ts = sn_get_unix_timestamp_ms();
   if (mv >= dry) {
     // more voltage -> dry in many circuits
     out_buf[0].value = 0.0f;

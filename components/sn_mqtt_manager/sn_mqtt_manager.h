@@ -32,6 +32,18 @@ esp_err_t sn_mqtt_start(void);
 esp_err_t sn_mqtt_publish_enqueue(const char *topic, const char *payload, int qos, bool retain);
 
 /*
+ * @brief general publish payload method without signature
+ */
+esp_err_t sn_mqtt_publish_payload_json(cJSON *payload, const char *topic);
+
+/*
+ * @brief general publish payload method with signature
+ */
+esp_err_t sn_mqtt_publish_json_payload_signed(
+  cJSON *payload, const char *topic, int qos, bool retain
+);
+
+/*
  * @brief Subscribe to mqtt topic
  */
 esp_err_t sn_mqtt_subscribe(const char *topic, int qos);
@@ -50,19 +62,6 @@ esp_err_t sn_mqtt_stop();
  * @brief Check if client is connected
  */
 esp_err_t sn_mqtt_destroy();
-
-// --------------------------------------------------------------------------------
-// Publisher api
-// --------------------------------------------------------------------------------
-
-esp_err_t publish_telemetry(const sn_sensor_reading_t *reading);
-
-esp_err_t publish_status(const sn_status_reading_t *status);
-
-/*
- * @brief json helpers
- */
-cJSON *parse_rx_payload(const void *event);
 
 /*
  * @brief debug utils

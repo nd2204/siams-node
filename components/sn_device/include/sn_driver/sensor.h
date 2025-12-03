@@ -25,14 +25,14 @@ typedef enum {
 typedef struct sn_sensor_reading_s {
   local_id_t local_id;
   float value;
-  time_t ts;
+  unsigned long long ts;
 } sn_sensor_reading_t;
 
 typedef struct sn_status_reading_s {
   float mem;
   float cpu;
   int wifi;
-  time_t ts;
+  unsigned long long ts;
 } sn_status_reading_t;
 
 typedef struct {

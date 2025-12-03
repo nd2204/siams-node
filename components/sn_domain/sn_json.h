@@ -56,14 +56,49 @@ cJSON *build_success_fmt(const char *fmt, ...);
 
 cJSON *sensor_reading_to_json_obj(const sn_sensor_reading_t *m);
 
+/*
+ * @brief Get boolean value from cJSON object
+ * @param root - cjson object reference
+ * @param key - key/field name
+ * @param out_val - boolean reference (allow null)
+ * @return true if key exist and its value is a boolean
+ */
 bool json_get_bool(const cJSON *root, const char *key, bool *out_val);
 
+/*
+ * @brief Get number from cJSON object
+ * @param root - cJSON object reference
+ * @param key - key/field name
+ * @param out_val - double reference (allow null)
+ * @return true if key exist and its value is a number
+ */
 bool json_get_number(const cJSON *root, const char *key, double *out_val);
 
+/*
+ * @brief Get integer from cJSON object
+ * @param root - cjson object reference
+ * @param key - key/field name
+ * @param out_val - int reference (allow null)
+ * @return true if key exist and its value is a number
+ */
 bool json_get_int(const cJSON *root, const char *key, int *out_val);
 
+/*
+ * @brief Get cJSON object from cJSON object
+ * @param root - cJSON object reference
+ * @param key - key/field name
+ * @param out_val - cJSON reference (allow null)
+ * @return true if key exist and its value is an json object
+ */
 bool json_get_object(const cJSON *root, const char *key, cJSON **out_val);
 
+/*
+ * @brief Get string from cJSON object
+ * @param root - cjson object reference
+ * @param key - key/field name
+ * @param out_val - char* reference (allow null)
+ * @return true if key exist and its value is a string
+ */
 bool json_get_string(const cJSON *root, const char *key, const char **out_val);
 
 #endif // !SN_JSON_H

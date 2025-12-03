@@ -6,6 +6,7 @@
 
 #include "esp_timer.h"
 #include "esp_log.h"
+#include "sn_sntp.h"
 #include "soc/gpio_num.h"
 #include <math.h>
 #include <stdbool.h>
@@ -96,11 +97,9 @@ static esp_err_t light_intensity_sensor_read_multi(
     if (D > 100.0f) D = 100.0f;
   }
 
-  time_t now;
-  time(&now);
   out_buf[0].local_id = c->sensor_id;
   out_buf[0].value = c->A * exp(c->B * D);
-  out_buf[0].ts = now;
+  out_buf[0].ts = sn_get_unix_timestamp_ms();
   *out_count = 1;
   return ESP_OK;
 }

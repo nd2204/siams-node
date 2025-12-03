@@ -1,10 +1,11 @@
 #include "esp_timer.h"
-#include "freertos/projdefs.h"
 #include <esp_log.h>
 #include <esp_heap_caps.h>
 #include "freertos/idf_additions.h"
 #include "sn_inet.h"
 #include "sn_mqtt_manager.h"
+#include "sn_sntp.h"
+#include "sn_topic.h"
 
 static const char *TAG = "STATUS_POLL_TASK";
 
@@ -12,7 +13,7 @@ static const char *TAG = "STATUS_POLL_TASK";
 #define STATUS_POLL_INTERVAL_MS 8000 // 8 seconds
 #endif
 
-static float get_memory_usage(void) {
+static inline float get_memory_usage(void) {
   size_t free_heap = heap_caps_get_free_size(MALLOC_CAP_DEFAULT);
   size_t total_heap = heap_caps_get_total_size(MALLOC_CAP_DEFAULT);
   if (total_heap == 0) return 0.0f;
@@ -49,6 +50,18 @@ static float get_cpu_usage(void) {
   return usage;
 }
 
+static inline esp_err_t publish_status(const sn_status_reading_t *status) {
+  if (!status) return ESP_ERR_INVALID_ARG;
+  const char *topic = sn_mqtt_topic_cache_get()->status_topic;
+  cJSON *json = cJSON_CreateObject();
+  cJSON_AddNumberToObject(json, "cpu", status->cpu);
+  cJSON_AddNumberToObject(json, "mem", status->mem);
+  cJSON_AddNumberToObject(json, "wifi", status->wifi);
+  cJSON_AddNumberToObject(json, "ts", status->ts);
+  cJSON_AddBoolToObject(json, "online", true);
+  return sn_mqtt_publish_json_payload_signed(json, topic, 0, false);
+}
+
 void status_poll_task(void *pvParams) {
   ESP_LOGI(TAG, "Status poll task started");
   sn_status_reading_t reading = {0};
@@ -56,7 +69,7 @@ void status_poll_task(void *pvParams) {
     reading.mem = get_memory_usage();
     reading.cpu = get_cpu_usage();
     reading.wifi = sn_inet_get_wifi_rssi();
-    time(&reading.ts);
+    reading.ts = sn_get_unix_timestamp_ms();
     publish_status(&reading);
     vTaskDelay(pdMS_TO_TICKS(STATUS_POLL_INTERVAL_MS));
   }

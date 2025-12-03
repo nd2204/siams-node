@@ -3,11 +3,10 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "mqtt_client.h"
-#include "sn_json.h"
+#include "sn_device_event.h"
 #include "sn_mqtt_router.h"
-#include "sn_sntp.h"
+#include "sn_security.h"
 #include "sn_storage.h"
-#include "sn_telemetry_queue.h"
 #include "sn_topic.h"
 #include <string.h>
 #include "freertos/idf_additions.h"
@@ -25,12 +24,9 @@ static EventGroupHandle_t s_mqtt_event_group;
 #define MQTT_CONNECTED_BIT    BIT0
 #define MQTT_DISCONNECTED_BIT BIT1
 
-typedef enum { MSG_TELEMETRY, MSG_STATUS, MSG_EVENT, MSG_COMMAND_ACK } mqtt_msg_type_e;
-
 typedef struct {
   char topic[256];
-  char payload[256];
-  mqtt_msg_type_e type;
+  char payload[1024];
   int qos;
   bool retain;
 } mqtt_publish_msg_t;
@@ -41,7 +37,7 @@ static void pub_task(void *arg) {
 
   while (1) {
     if (xQueueReceive(s_mqtt_pubq, &msg, portMAX_DELAY) == pdTRUE) {
-      int msg_id = esp_mqtt_client_publish(client, msg.topic, msg.payload, 0, 1, 0);
+      int msg_id = esp_mqtt_client_publish(client, msg.topic, msg.payload, 0, msg.qos, msg.retain);
       if (msg_id >= 0) {
         ESP_LOGI(TAG, "Tx [%d]: %s ", msg_id, msg.payload);
       } else {
@@ -100,9 +96,9 @@ esp_err_t sn_mqtt_init(const sn_mqtt_config_t *cfg) {
   // to the next buffer
   char mqtt_user[64] = {0};
   char mqtt_pass[64] = {0};
-  char lwt_payload[64] = {0};
   char broker_uri[128] = {0};
   char lwt_topic[MAX_TOPIC_LEN] = {0};
+  char lwt_payload[1024] = {0};
 
   s_mqtt_pubq = xQueueCreate(16, sizeof(mqtt_publish_msg_t));
   if (!s_mqtt_pubq) return ESP_ERR_NO_MEM;
@@ -121,7 +117,7 @@ esp_err_t sn_mqtt_init(const sn_mqtt_config_t *cfg) {
     .credentials.authentication.password = mqtt_pass[0] ? mqtt_pass : NULL,
     .session.last_will.topic = lwt_topic[0] ? lwt_topic : NULL,
     .session.last_will.msg = lwt_payload[0] ? lwt_payload : NULL,
-    .session.last_will.retain = true,
+    .session.last_will.retain = false,
     .session.last_will.qos = 1,
     .session.keepalive = 10
   };
@@ -170,6 +166,10 @@ esp_err_t sn_mqtt_start(void) {
   return err;
 }
 
+esp_err_t sn_mqtt_stop() { return esp_mqtt_client_stop(client); }
+
+esp_err_t sn_mqtt_destroy() { return esp_mqtt_client_destroy(client); }
+
 // Enqueue message safely
 static esp_err_t publisher_enqueue(mqtt_publish_msg_t *msg) {
   if (!s_mqtt_pubq) return ESP_ERR_INVALID_STATE;
@@ -181,47 +181,48 @@ static esp_err_t publisher_enqueue(mqtt_publish_msg_t *msg) {
 }
 
 esp_err_t sn_mqtt_publish_enqueue(const char *topic, const char *payload, int qos, bool retain) {
-  mqtt_publish_msg_t msg = {.type = MSG_EVENT, .qos = qos, .retain = retain};
+  mqtt_publish_msg_t msg = {.qos = qos, .retain = retain};
   strncpy(msg.topic, topic, sizeof(msg.topic));
   strncpy(msg.payload, payload, sizeof(msg.payload) - 1);
   return publisher_enqueue(&msg);
 }
 
-esp_err_t publish_telemetry(const sn_sensor_reading_t *reading) {
-  if (!reading) return ESP_ERR_INVALID_ARG;
+esp_err_t sn_mqtt_publish_json_payload(cJSON *payload, const char *topic, int qos, bool retain) {
+  if (!payload || !topic) return ESP_ERR_INVALID_ARG;
+  mqtt_publish_msg_t msg = {.qos = qos, .retain = retain};
 
-  mqtt_publish_msg_t msg = {.type = MSG_TELEMETRY, .qos = 0, .retain = false};
-  const char *topic = sn_mqtt_topic_cache_get()->telemetry_topic;
+  char *json_str = cJSON_PrintUnformatted(payload);
   strncpy(msg.topic, topic, sizeof(msg.topic));
-  cJSON *json = sensor_reading_to_json_obj(reading);
+  strncpy(msg.payload, json_str, sizeof(msg.payload) - 1);
+
+  cJSON_free(json_str);
+  cJSON_Delete(payload);
+  return publisher_enqueue(&msg);
+}
+
+esp_err_t sn_mqtt_publish_json_payload_signed(
+  cJSON *payload, const char *topic, int qos, bool retain
+) {
+  if (!payload || !topic) return ESP_ERR_INVALID_ARG;
+  mqtt_publish_msg_t msg = {.qos = qos, .retain = retain};
+
+  cJSON *json = sn_security_sign_and_wrap_payload(payload);
   if (!json) return ESP_ERR_NO_MEM;
   char *json_str = cJSON_PrintUnformatted(json);
+
+  strncpy(msg.topic, topic, sizeof(msg.topic));
   strncpy(msg.payload, json_str, sizeof(msg.payload) - 1);
+
   cJSON_free(json_str);
   cJSON_Delete(json);
   return publisher_enqueue(&msg);
 }
 
-esp_err_t publish_status(const sn_status_reading_t *status) {
-  if (!status) return ESP_ERR_INVALID_ARG;
-  mqtt_publish_msg_t msg = {.type = MSG_STATUS, .qos = 0, .retain = false};
-  const char *topic = sn_mqtt_topic_cache_get()->status_topic;
-
-  cJSON *json = cJSON_CreateObject();
-  cJSON_AddNumberToObject(json, "cpu", status->cpu);
-  cJSON_AddNumberToObject(json, "mem", status->mem);
-  cJSON_AddNumberToObject(json, "wifi", status->wifi);
-  cJSON_AddBoolToObject(json, "online", true);
-  cJSON_AddNumberToObject(json, "ts", status->ts);
-  char *json_str = cJSON_PrintUnformatted(json);
-
-  strncpy(msg.topic, topic, sizeof(msg.topic));
-  strncpy(msg.payload, json_str, sizeof(msg.payload) - 1);
-
-  cJSON_free(json_str);
-  cJSON_Delete(json);
-
-  return publisher_enqueue(&msg);
+esp_err_t publish_device_event(const sn_device_event_t *event) {
+  if (!event) return ESP_ERR_INVALID_ARG;
+  cJSON *json = sn_device_event_to_json(event);
+  const char *topic = sn_mqtt_topic_cache_get()->event_topic;
+  return sn_mqtt_publish_json_payload_signed(json, topic, 1, false);
 }
 
 esp_err_t sn_mqtt_subscribe(const char *topic, int qos) {
@@ -239,20 +240,6 @@ esp_err_t sn_mqtt_register_handler(sn_mqtt_msg_cb_t cb, void *arg) {
   msg_arg = arg;
   ESP_LOGI(TAG, "MQTT message callback registered");
   return ESP_OK;
-}
-
-esp_err_t sn_mqtt_stop() { return esp_mqtt_client_stop(client); }
-
-esp_err_t sn_mqtt_destroy() { return esp_mqtt_client_destroy(client); }
-
-cJSON *parse_rx_payload(const void *event) {
-  if (!event) return NULL;
-  esp_mqtt_event_handle_t e = (esp_mqtt_event_handle_t)event;
-  char *buf = malloc(e->data_len + 1);
-  memcpy(buf, e->data, e->data_len);
-  buf[e->data_len] = '\0';
-  return cJSON_Parse(buf);
-  free(buf);
 }
 
 void mqtt_debug_print_rx(const void *event) {

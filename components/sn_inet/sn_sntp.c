@@ -78,6 +78,13 @@ void sn_timestamp_to_iso8601(time_t timestamp, char *buffer, size_t buffer_size)
     tv.tv_usec / 1000
   );
 }
+unsigned long long sn_get_unix_timestamp_ms() {
+  struct timeval tv;
+  gettimeofday(&tv, NULL); // Get current time into tv
+
+  // Calculate milliseconds since epoch
+  return (unsigned long long)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
 
 void sn_get_iso8601_timestamp(char *buffer, size_t buffer_size) {
   time_t now;

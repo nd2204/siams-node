@@ -8,76 +8,53 @@
 #include "sn_json.h"
 #include "esp_log.h"
 #include "cJSON.h"
+#include "esp_mac.h"
+#include <esp_efuse.h>
 #include <esp_chip_info.h>
 #include <esp_system.h>
+#include <esp_efuse.h>
 
 static const char *TAG = "SN_CAPABILITY";
 
 static const char *sensorTypeStr[] = {
-#define TO_STR(x) #x,
-  SENSOR_TYPE(TO_STR)
-#undef TO_STR
+#define TO_ENUM_STR(x) TO_STR(x),
+  SENSOR_TYPE(TO_ENUM_STR)
+#undef TO_ENUM_STR
 };
+
+#define STRINGIZE(x) TO_STR(x)
+
+#define FIRMWARE_VERSION CONFIG_FIRMWARE_VERSION
+#if !defined(FIRMWARE_VERSION)
+#error "CONFIG_FIRMWARE_VERSION required"
+#endif
 
 static cJSON *create_command_capability_json(const sn_driver_desc_t *desc) {
   if (!desc->control || !desc->command_desc) return NULL;
   return command_desc_to_json(desc->command_desc);
 }
 
-const char *get_chip_model_str(esp_chip_model_t model) {
-  switch (model) {
-    case CHIP_ESP32:
-      return "ESP32";
-    case CHIP_ESP32S2:
-      return "ESP32";
-    case CHIP_ESP32S3:
-      return "ESP32S2";
-    case CHIP_ESP32C3:
-      return "ESP32S3";
-    case CHIP_ESP32C2:
-      return "ESP32C3";
-    case CHIP_ESP32C6:
-      return "ESP32C2";
-    case CHIP_ESP32H2:
-      return "ESP32C6";
-    case CHIP_ESP32P4:
-      return "ESP32H2";
-    case CHIP_ESP32C61:
-      return "ESP32P4";
-    case CHIP_ESP32C5:
-      return "ESP32C61";
-    case CHIP_ESP32H21:
-      return "ESP32C5";
-    case CHIP_ESP32H4:
-      return "ESP32H21";
-    case CHIP_POSIX_LINUX:
-      return "POSIX_LINUX";
-  }
-  return "Unknown";
-}
-
 /* Result payload sample:
  * {
  *   model: "ESP32",
- *   firmwareVersion: "v1.0.0",
- *   capabilities: {
- *     sensors: [
- *       {localId: 1, name: 'temp-1', type: 'dht11', unit: "C"},
- *       ...
- *     ],
- *     actuators: [
- *       {localId: 2, name: 'pump-1', type: 'PUMP'},
- *       ...
- *     ],
- *     commands: [
- *       {localId: 2, commands: [
- *         {action: "control_relay", params: [
- *           { name: "enable", type: "boolean" },
- *           { name: "duration_sec", type: "int" }
- *         ]}
+ *   fw_ver: "v1.0.0",
+ *   hw_id: ""
+ *   sensors: [
+ *     {localId: 1, name: 'temp-1', type: 'dht11', unit: "C"},
+ *     ...
+ *   ],
+ *   actuators: [
+ *     {localId: 2, name: 'pump-1', type: 'PUMP'},
+ *     ...
+ *   ],
+ *   commands: [
+ *     {localId: 2, commands: [
+ *       {action: "control_relay", params: [
+ *         { name: "enable", type: "boolean" },
+ *         { name: "duration_sec", type: "int" }
  *       ]}
- *     ]
- *   }
+ *     ]}
+ *   ]
  * }
  */
 cJSON *device_ports_to_capabilities_json() {
@@ -88,22 +65,26 @@ cJSON *device_ports_to_capabilities_json() {
   cJSON *json = cJSON_CreateObject();
   if (!json) return NULL;
 
-  cJSON *capability_obj = cJSON_AddObjectToObject(json, "capabilities");
-  cJSON *sensor_capability = cJSON_AddArrayToObject(capability_obj, "sensors");
-  cJSON *actuator_capability = cJSON_AddArrayToObject(capability_obj, "actuators");
-  cJSON *command_capability = cJSON_AddArrayToObject(capability_obj, "commands");
-
-  cJSON *location_obj = cJSON_AddObjectToObject(json, "location");
-  // TODO: Add a GPS module?
-  cJSON_AddNumberToObject(location_obj, "lat", 21.047324478422933);
-  cJSON_AddNumberToObject(location_obj, "lon", 105.78543402753904);
-
   esp_chip_info_t chip_info;
   esp_chip_info(&chip_info);
+  const char *model = get_chip_model_str(chip_info.model);
 
-  cJSON_AddItemToObject(json, "model", cJSON_CreateString(get_chip_model_str(chip_info.model)));
-  cJSON_AddItemToObject(json, "firmwareVersion", cJSON_CreateString(CONFIG_FIRMWARE_VERSION));
+  char mac_str[64];
+  get_hwid(mac_str, sizeof(mac_str));
 
+  cJSON_AddItemToObject(json, "model", cJSON_CreateString(model));
+  cJSON_AddItemToObject(json, "fw_ver", cJSON_CreateString("v1.0.0"));
+  cJSON_AddItemToObject(json, "hw_id", cJSON_CreateString(mac_str));
+  // TODO: Add a GPS module?
+  cJSON_AddNumberToObject(json, "lat", 21.047324478422933);
+  cJSON_AddNumberToObject(json, "lon", 105.78543402753904);
+  // TODO: support ecdsa if device support secure element
+  cJSON_AddItemToObject(json, "signing", cJSON_CreateString("hmac"));
+  // cJSON_AddItemToObject(json, "pubkey", cJSON_CreateString(""));
+
+  cJSON *sensor_capability = cJSON_AddArrayToObject(json, "sensors");
+  cJSON *actuator_capability = cJSON_AddArrayToObject(json, "actuators");
+  cJSON *command_capability = cJSON_AddArrayToObject(json, "commands");
   FOR_EACH_INSTANCE(it, gDeviceInstances, gDeviceInstancesLen) {
     cJSON *command_obj = cJSON_CreateObject();
     cJSON *command_array = cJSON_AddArrayToObject(command_obj, "commands");
@@ -120,7 +101,7 @@ cJSON *device_ports_to_capabilities_json() {
           cJSON_AddStringToObject(entry, "unit", m_it->unit);
           cJSON_AddItemToArray(sensor_capability, entry);
           if (command) {
-            cJSON_AddNumberToObject(command_obj, "localId", m_it->local_id);
+            cJSON_AddNumberToObject(command_obj, "local_id", m_it->local_id);
             cJSON_AddItemToArray(command_capability, command_obj);
           }
         }
@@ -133,14 +114,14 @@ cJSON *device_ports_to_capabilities_json() {
         cJSON_AddItemToObject(entry, "type", cJSON_CreateString(it->port->drv_name));
         cJSON_AddItemToArray(actuator_capability, entry);
         if (command) {
-          cJSON_AddNumberToObject(command_obj, "localId", a->local_id);
+          cJSON_AddNumberToObject(command_obj, "local_id", a->local_id);
           cJSON_AddItemToArray(command_capability, command_obj);
         }
       } break;
       case DRIVER_TYPE_COMMAND_API: {
         const sn_command_api_port_t *c = &it->port->desc.c;
         if (command) {
-          cJSON_AddItemToObject(command_obj, "localId", cJSON_CreateNumber(c->local_id));
+          cJSON_AddItemToObject(command_obj, "local_id", cJSON_CreateNumber(c->local_id));
           cJSON_AddItemToObject(command_obj, "name", cJSON_CreateString(it->port->port_name));
           cJSON_AddItemToObject(command_obj, "type", cJSON_CreateString(it->port->drv_name));
           cJSON_AddItemToArray(command_capability, command_obj);

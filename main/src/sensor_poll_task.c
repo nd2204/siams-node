@@ -1,10 +1,17 @@
 #include "esp_timer.h"
-#include "sn_driver.h"
 #include "sn_mqtt_manager.h"
-#include "sn_telemetry_queue.h"
 #include "sn_topic.h"
+#include "sn_telemetry_queue.h"
+#include "sn_driver.h"
 
 static const char *TAG = "SENSOR_POLL_TASK";
+
+static esp_err_t mqtt_publish_telemetry(const sn_sensor_reading_t *reading) {
+  if (!reading) return ESP_ERR_INVALID_ARG;
+  const char *topic = sn_mqtt_topic_cache_get()->telemetry_topic;
+  cJSON *json = sensor_reading_to_json_obj(reading);
+  return sn_mqtt_publish_json_payload_signed(json, topic, 0, false);
+}
 
 void sensor_poll_task(void *pvParam) {
   size_t len = sn_driver_get_instance_len();
@@ -27,7 +34,7 @@ void sensor_poll_task(void *pvParam) {
           // notify subscriber
           distribute_reading(&readings[i]);
           // send reading to publisher task
-          publish_telemetry(&readings[i]);
+          mqtt_publish_telemetry(&readings[i]);
         }
         vTaskDelay(pdMS_TO_TICKS(20));
       } else {
